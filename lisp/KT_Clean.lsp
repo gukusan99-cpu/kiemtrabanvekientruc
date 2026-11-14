@@ -10,12 +10,11 @@
 ;;;   Z-KHAC0      CANHBAO doi tuong trong Model co cao do Z khac 0
 ;;;   LINE-0       GOIY    LINE dai 0
 ;;;   PLINE-0      GOIY    LWPOLYLINE 0/1 dinh hoac chieu dai 0
-;;;   TEXT-RONG    GOIY    TEXT rong
 ;;;   LINE-TRUNG   CANHBAO LINE trung hoan toan (copy chong), cung layer
 ;;;   BLOCK-TRUNG  CANHBAO INSERT trung ten + vi tri + scale + goc (copy chong)
 ;;;   BLOCK-THUA   GOIY    dinh nghia block khong duoc dung (chua purge) - 1 dong tong ket
 ;;;   LAYER-RONG   GOIY    layer khong co doi tuong nao (ngoai chuan) - 1 dong tong ket
-;;;   HATCH-KLK    GOIY    HATCH khong lien ket bien (associative = 0)
+;;;   HATCH-KLK    GOIY    HATCH khong lien ket bien (associative = 0) - 1 dong/khong gian
 ;;; ============================================================
 
 (vl-load-com)
@@ -131,7 +130,9 @@
     (if (and nm (= 4 (logand 4 fl)))
       (progn
         (setq p (cond ((kt:dxf 1 tb)) ("")))
-        (if (not (ktcl:filefound p))
+        ;; 70 bit 32 = xref da resolve (CAD da tim thay file, ke ca xref long co duong dan
+        ;; tuong doi theo file cha) -> khong bao
+        (if (and (= 0 (logand 32 fl)) (not (ktcl:filefound p)))
           (kt:add "SACH" "XREF-MAT" "LOI"
                   (strcat "Xref '" nm "' khong tim thay file: "
                           (if (= (kt:trim p) "") "(khong co duong dan)" p))
@@ -220,8 +221,8 @@
                 g nil nil))))
 )
 
-;;; ---------- 3. LWPOLYLINE suy bien, TEXT rong ----------
-(defun ktcl:chk-degenerate (/ ss i en ed pts p0 ok s)
+;;; ---------- 3. LWPOLYLINE suy bien ----------
+(defun ktcl:chk-degenerate (/ ss i en ed pts p0 ok)
   (if (setq ss (ssget "_X" (append '((0 . "LWPOLYLINE")) (ktcl:notmark))))
     (progn
       (setq i 0)
@@ -238,15 +239,8 @@
                   (strcat "LWPOLYLINE " (itoa (length pts)) " dinh, chieu dai 0 tren layer "
                           (kt:dxf 8 ed) " (rac, nen xoa)")
                   en nil nil)))))
-  (if (setq ss (ssget "_X" (append '((0 . "TEXT")) (ktcl:notmark))))
-    (progn
-      (setq i 0)
-      (repeat (sslength ss)
-        (setq en (ssname ss i) i (1+ i) ed (entget en) s (kt:dxf 1 ed))
-        (if (= (kt:trim s) "")
-          (kt:add "SACH" "TEXT-RONG" "GOIY"
-                  (strcat "TEXT rong tren layer " (kt:dxf 8 ed) " (rac, nen xoa)")
-                  en nil nil)))))
+  ;; TEXT rong: da kiem o module TEXT (TEXT-RONG) - khong bao trung o day
+  T
 )
 
 ;;; ---------- 5. INSERT copy chong ----------
@@ -378,15 +372,17 @@
     (if (and nm
              (not (member up (list "0" "DEFPOINTS" cl (strcase *KT:LAYER*))))
              (not (vl-string-search "|" up))
-             (not (member up std))                       ; layer chuan de san trong mau: bo qua
-             (null (ssget "_X" (list (cons 8 (ktcl:wcesc nm))))))
+             (not (member up std)))                      ; layer chuan de san trong mau: bo qua
       (setq cand (cons nm cand)))
     (setq tb (tblnext "LAYER")))
+  ;; loc re (layer dung trong block) truoc, roi moi ssget "_X" tung layer con lai
   (if cand
     (progn
       (setq blays (car (ktcl:blkwalk)))
       (foreach nm (reverse cand)
-        (if (not (member (strcase nm) blays)) (setq empty (cons nm empty))))))
+        (if (and (not (member (strcase nm) blays))
+                 (null (ssget "_X" (list (cons 8 (ktcl:wcesc nm))))))
+          (setq empty (cons nm empty))))))
   (if empty
     (progn
       (setq empty (reverse empty) shown nil)
@@ -399,16 +395,24 @@
 )
 
 ;;; ---------- 8. HATCH khong lien ket ----------
-(defun ktcl:chk-hatch (/ ss i en ed)
+(defun ktcl:chk-hatch (/ ss i en ed sp grp g)
+  ;; gom theo khong gian: hatch khong lien ket rat pho bien (copy/mirror lam mat lien ket),
+  ;; khong phai loi ban ve -> 1 dong GOIY / khong gian (chon toi da 50 hatch)
   (if (setq ss (ssget "_X" (append '((0 . "HATCH") (71 . 0)) (ktcl:notmark))))
     (progn
       (setq i 0)
       (repeat (sslength ss)
-        (setq en (ssname ss i) i (1+ i) ed (entget en))
+        (setq en (ssname ss i) i (1+ i) ed (entget en) sp (kt:space ed))
+        (if (setq g (assoc sp grp))
+          (setq grp (subst (list sp (1+ (cadr g))
+                                 (if (< (length (caddr g)) 50) (cons en (caddr g)) (caddr g)))
+                           g grp))
+          (setq grp (cons (list sp 1 (list en)) grp))))
+      (foreach g (reverse grp)
         (kt:add "SACH" "HATCH-KLK" "GOIY"
-                (strcat "HATCH " (cond ((kt:dxf 2 ed)) ("")) " tren layer " (kt:dxf 8 ed)
-                        " khong lien ket bien (sua bien se khong cap nhat hatch)")
-                en nil nil))))
+                (strcat (itoa (cadr g)) " HATCH khong lien ket bien trong " (car g)
+                        " (sua bien se khong cap nhat hatch)")
+                (reverse (caddr g)) nil nil))))
 )
 
 ;;; ---------- Chay ----------

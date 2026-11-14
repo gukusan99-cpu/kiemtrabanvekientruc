@@ -33,3 +33,14 @@
 3. `kt:frames` (Model) uu tien ty le GHI trong khung (`tsc`) cho truong 4 `scale`; KTKHUNG tu tinh ty le thuc
    (|41| x ty le goc) de so. Neu module khac dung `kt:scale-at` cho chieu cao chu thi khung ghi sai ty le se lam
    lech ket qua cua module do (co the nen uu tien ty le thuc).
+
+## [Reviewer 2 - QA KT_Text/KT_Clean/KT_Dim]
+1. `kt:frames` duyet MOI INSERT (`kt:ss-all '((0 . "INSERT"))`) va goi `kt:effname` (ActiveX) + `kt:cfg-row` cho tung cai:
+   ban ve 100k doi tuong nhieu block -> cham ngay lan dau goi `kt:scale-at`. De nghi loc ssget theo ten:
+   `(2 . "<ten khung escape>,`*U*")` roi moi goi effname.
+2. `kt:viewports` lay ca viewport dang TAT (DXF 68 = 0; -1 la VP bat nhung khong active, van giu) -> co the dua ty le cua VP an vao `kt:scale-at`.
+   De nghi bo VP co 68 = 0 - NHUNG can kiem truoc: VP tren layout chua mo co the cung tra 68 = 0
+   (chua xac nhan) -> thu tren AutoCAD 2018 truoc khi sua.
+3. `kt:scale-at` (Model) chi tra 1 ty le (khung truoc, roi VP dau tien chua diem). Ban ve VN thuong co
+   hinh chi tiet 1/20 nam trong khung/VP 1/100 -> module tu xet them moi VP chua diem (ktdim:vp-at,
+   kttxt:vp-at). Nen co ham loi `kt:scales-at` tra ve TAT CA ty le ung vien.
