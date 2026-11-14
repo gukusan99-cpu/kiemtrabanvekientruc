@@ -587,9 +587,8 @@
     "; DUNG_SAI_KICH_THUOC: dung sai (mm) khi so khop kich thuoc / truc / cao do."
     "SETTING|DUNG_SAI_KICH_THUOC|1"
     "; LAYER_BO_QUA: layer khong kiem tra (wildcard, cach nhau dau phay)."
-    ";   KHONG ghi mau *|* (dau | la ky tu phan cach truong -> bi tach thanh '*' = MOI layer)."
-    ";   Layer xref (ten co |) luon duoc bo qua."
-    "SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK"
+    ";   *|* = moi layer xref (KT_Core noi lai phan sau dau | cua gia tri SETTING)."
+    "SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,*|*"
     "; FONT_CHO_PHEP: file font (.shx/.ttf) duoc phep dung trong textstyle."
     (ktmau:row "SETTING" (list "FONT_CHO_PHEP" (kt:join fonts ","))))
 )

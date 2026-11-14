@@ -15,3 +15,11 @@
 - (1) `kt:cfg-val` noi lai cac truong bang `|` (bo truong rong cuoi) -> `*|*` dung duoc. `kt:join` sua loi phan tu dau rong.
 - (2) cap MAX_LOI_MOI_MA cache trong `kt:begin` (*KT:CAP*).
 - (3) `kt:wcmatch-any`, `kt:cfg-row` chiu duoc nil.
+
+## [Lap trinh vien A - KT_Template/KT_Load/KT_Menu]
+1. `kt:dir` fallback `(getvar "DWGPREFIX")` da co `\` cuoi -> `kt:cfg-file` tao `...\\KT_ChuanCongTy.txt` (2 dau `\`).
+   Windows chap nhan nhung nen bo `\` cuoi.
+2. `kt:frames` chi tinh lai khi `*KT:FRAMES*` = nil; ban ve khong co khung -> quet lai moi lan goi `kt:frame-at`
+   (cham neu goi trong vong lap moi doi tuong). De nghi danh dau 'NONE nhu `kt:viewports`.
+
+- (4) `kt:dir` bo dau \ cuoi; (5) `kt:frames` cache ca truong hop khong co khung.

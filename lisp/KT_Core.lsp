@@ -156,9 +156,13 @@
 ;;; ---------- File chuan cong ty ----------
 ;;; Dinh dang: moi dong  MUC|truong1|truong2|...   ; dong bat dau ';' la ghi chu
 (defun kt:dir (/ f)
-  (if (setq f (findfile "KT_Core.lsp"))
-    (vl-filename-directory f)
-    (getvar "DWGPREFIX"))
+  ;; thu muc chua bo tool, khong co dau \ cuoi
+  (setq f (if (setq f (findfile "KT_Core.lsp"))
+            (vl-filename-directory f)
+            (getvar "DWGPREFIX")))
+  (while (and (> (strlen f) 3) (member (substr f (strlen f)) '("\\" "/")))
+    (setq f (substr f 1 (1- (strlen f)))))
+  f
 )
 
 (defun kt:cfg-file (/ f)
@@ -286,8 +290,8 @@
                                   (if (nth 2 row) (kt:attval en (nth 2 row)))
                                   tsc)
                             res)))))
-      (setq *KT:FRAMES* (reverse res))))
-  *KT:FRAMES*
+      (setq *KT:FRAMES* (if res (reverse res) 'NONE))))
+  (if (= *KT:FRAMES* 'NONE) nil *KT:FRAMES*)
 )
 
 (defun kt:frame-at (p space / res)
