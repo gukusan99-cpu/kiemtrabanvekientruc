@@ -130,7 +130,7 @@
   (if (null *KT:CP*)
     (setq *KT:CP*
            (if (and (= (strcase (kt:str (getvar "SYSCODEPAGE"))) "ANSI_1258")
-                    (not (eql 1 (getvar "LISPSYS"))))
+                    (not (equal 1 (getvar "LISPSYS"))))
              "1258" "X")))
   (= *KT:CP* "1258")
 )
@@ -579,7 +579,7 @@
       (while (vl-string-search " " s) (setq s (vl-string-subst "" " " s)))
       (setq st 0)
       (while (and (null b) (setq p (vl-string-search "1/" s st)))
-        (if (or (= p 0) (not (wcmatch (substr s p 1) "#,.")))
+        (if (or (= p 0) (not (wcmatch (substr s p 1) "#,`.")))
           (setq b (kt:num (kt:numhead (substr s (+ p 3))))))
         (setq st (1+ p)))
       (if (and b (> b 0)) b)))
@@ -674,21 +674,31 @@
   (if (= *KT:VPS* 'NONE) nil *KT:VPS*)
 )
 
+(defun kt:scales-at (p space / f scs)
+  ;; TAT CA ty le ung vien tai diem p (khung ten + moi viewport nhin thay p), khong trung
+  (cond
+    ((/= space "Model") (list 1.0))
+    ((null p) nil)
+    (T
+     (if (and (setq f (kt:frame-at p space)) (numberp (nth 4 f)) (> (nth 4 f) 0))
+       (setq scs (list (nth 4 f))))
+     (foreach v (kt:viewports)
+       (if (and (kt:inbox p (nth 3 v) (nth 4 v))
+                (not (vl-member-if '(lambda (s) (equal s (nth 2 v) (* 0.001 s))) scs)))
+         (setq scs (append scs (list (nth 2 v))))))
+     scs))
+)
+
 (defun kt:scale-at (p space / f scs)
   ;; ty le (vd 100.0) tai diem p; layout -> 1.0; nil neu khong xac dinh.
   ;; Model: khung ten chua diem; khong co khung -> viewport nhin thay diem.
   ;; Nhieu viewport khac ty le cung nhin thay diem (vd mat bang 1/100 + chi tiet 1/25)
-  ;; -> nil (khong doan, tranh bao nham).
+  ;; -> tra ty le LON NHAT (thuong la ban ve chinh); module can xet them kt:scales-at.
   (cond
     ((/= space "Model") 1.0)
     ((null p) nil)
     ((and (setq f (kt:frame-at p space)) (nth 4 f)) (nth 4 f))
-    (T
-     (foreach v (kt:viewports)
-       (if (and (kt:inbox p (nth 3 v) (nth 4 v))
-                (not (vl-member-if '(lambda (s) (equal s (nth 2 v) (* 0.001 s))) scs)))
-         (setq scs (cons (nth 2 v) scs))))
-     (if (= (length scs) 1) (car scs))))
+    ((setq scs (kt:scales-at p space)) (apply 'max scs)))
 )
 
 (defun kt:reset-cache ()

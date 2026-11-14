@@ -44,3 +44,4 @@
 3. `kt:scale-at` (Model) chi tra 1 ty le (khung truoc, roi VP dau tien chua diem). Ban ve VN thuong co
    hinh chi tiet 1/20 nam trong khung/VP 1/100 -> module tu xet them moi VP chua diem (ktdim:vp-at,
    kttxt:vp-at). Nen co ham loi `kt:scales-at` tra ve TAT CA ty le ung vien.
+4. (da duoc Reviewer 1 sua trong luc review) `kt:cp1258-p` tung goi `eql` - AutoLISP khong co ham nay.
