@@ -89,7 +89,7 @@ class Interp:
                     return sf(x)
                 f = head.value
                 if f is None:
-                    raise self._err("no function definition: " + head.name, x)
+                    raise self._undef(head, x)
             elif isinstance(head, Cons) and head.car is self.LAMBDA:
                 f = self._mk_lambda(head)
             else:
@@ -102,6 +102,16 @@ class Interp:
             return self.call(f, args, x)
         return x
 
+    unsupported_prefixes = ()
+
+    def _undef(self, sym, form):
+        n = sym.name
+        if self.unsupported_prefixes and n.startswith(self.unsupported_prefixes):
+            e = self._err("SIM-UNSUPPORTED: lispsim chua gia lap ham " + n, form, "sim")
+            self.sim_bugs.append((e.msg, list(self.stack), self.where(form), ""))
+            return e
+        return self._err("no function definition: " + n, form)
+
     def _err(self, msg, form=None, kind="lisp"):
         e = LispError(msg, kind)
         e.form = form
@@ -111,7 +121,7 @@ class Interp:
         if isinstance(f, Sym):
             v = f.value
             if v is None:
-                raise LispError("no function definition: " + f.name)
+                raise self._undef(f, None)
             return v
         if isinstance(f, Cons) and f.car is self.LAMBDA:
             return self._mk_lambda(f)
