@@ -298,7 +298,7 @@
              (or (null used) (member (strcase nm) used)))
       (progn
         (setq e  (tblobjname "DIMSTYLE" nm)
-              ed (cond ((and e (entget e))) (d))
+              ed (cond ((if e (entget e))) (d))
               ts (ktmau:dim-tstyle ed)
               tss (ktmau:adduniq ts tss))
         (setq res (cons (ktmau:row "DIMSTYLE"
