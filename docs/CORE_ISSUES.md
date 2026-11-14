@@ -23,3 +23,13 @@
    (cham neu goi trong vong lap moi doi tuong). De nghi danh dau 'NONE nhu `kt:viewports`.
 
 - (4) `kt:dir` bo dau \ cuoi; (5) `kt:frames` cache ca truong hop khong co khung.
+
+## [Lap trinh vien D - KT_Sheet/KT_Match]
+1. De nghi dua vao loi cac ham chuoi dang bi chep lai o 2 module (ktsh:/ktmat:): bo dau tieng Viet `\U+XXXX`
+   (`*:unaccent`, `*:uchar`, `*:hex`), bo ma dinh dang MTEXT (`*:plain`), chuan hoa so sanh (`*:norm`, chi giu A-Z 0-9),
+   doc noi dung MTEXT dai (nhom 3 + 1: `*:txt`), merge sort on dinh (`*:msort` - vl-sort xoa phan tu trung).
+2. `kt:viewports` tinh vung model tu DXF 12 (tam view theo DCS), bo qua 17 (view target) va 51 (twist):
+   viewport xoay / UCS khac WCS cho vung model sai -> KTKHOP gan doi tuong nham ban ve. Nen dung them 17 va 51.
+3. `kt:frames` (Model) uu tien ty le GHI trong khung (`tsc`) cho truong 4 `scale`; KTKHUNG tu tinh ty le thuc
+   (|41| x ty le goc) de so. Neu module khac dung `kt:scale-at` cho chieu cao chu thi khung ghi sai ty le se lam
+   lech ket qua cua module do (co the nen uu tien ty le thuc).

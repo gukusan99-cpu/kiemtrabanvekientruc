@@ -165,6 +165,14 @@ def check_axes(units, issues):
                                % (ref[0], ",".join(com), lab, ",".join(mine))))
 
 
+def near(seq, c, tolm):
+    best = None
+    for n, ci in seq:
+        if abs(ci - c) <= tolm and (best is None or abs(ci - c) < abs(best[1] - c)):
+            best = (n, ci)
+    return best
+
+
 def check_dims(units, issues):
     tolm = max(2 * TOL, 5.0)
     for u in units:
@@ -174,11 +182,11 @@ def check_dims(units, issues):
             for fam, orient, s in u["seqs"]:
                 if orient != dr:
                     continue
-                a = [n for n, c in s if abs(c - p13[idx]) <= tolm]
-                b = [n for n, c in s if abs(c - p14[idx]) <= tolm]
+                a = near(s, p13[idx], tolm)       # truc gan nhat trong dung sai (ktmat:near)
+                b = near(s, p14[idx], tolm)
                 if a and b and a[0] != b[0]:
-                    ca = dict(s)[a[0]]
-                    cb = dict(s)[b[0]]
+                    ca = a[1]
+                    cb = b[1]
                     ad = abs(cb - ca)
                     if abs(val - ad) > TOL:
                         ends = {s[0][0], s[-1][0]}
@@ -250,7 +258,11 @@ def check_levels(units, issues):
     if ref:
         for u in units:
             if "MB" in u["flags"] and not ({"MD", "MC"} & u["flags"]):
+                done = set()                     # moi gia tri 1 lan / ban ve
                 for lv in u["levels"]:
+                    if round(lv[0], 3) in done:
+                        continue
+                    done.add(round(lv[0], 3))
                     if not any(abs(lv[0] - r) <= TOL_V for r in ref):
                         issues.append(("KHOP-CAODO-MB", "GOIY",
                                        "Cao do %+.3f tren mat bang %s khong co tren mat cat"
@@ -317,7 +329,8 @@ def scenario_errors():
     ys_bad[1] += 100                                   # mat cat: truc B lech 100
     lvy = [v * 1000 for v in LEVELS]
     lvy[1] -= 50                                       # +3.600 dat thap 50 mm
-    units = [plan("KT-01", 0, 0, lv=[0.0]),
+    units = [plan("KT-01", 0, 0, lv=[0.0],
+                  dims=[((0, 0), (14600, 0), "H", 14500)]),   # dim tong 1-5 ghi de sai
              plan("KT-02", 50000, 0, lv=[3.55],        # COS +3.550 khong co tren mat cat
                   dims=[((50000 + 3600, 0), (50000 + 7200, 0), "H", 3500)]),  # dim ghi de sai
              section("KT-05", 100000, 0, ys=ys_bad, lvy=lvy),
@@ -363,6 +376,7 @@ def main():
            scenario_errors(),
            ["KHOP-TRUC", "KHOP-TRUC",                 # A-B va B-C tren KT-05
             "KHOP-DIMTRUC",                           # dim 2-3 ghi 3500 tren KT-02
+            "KHOP-TONG",                              # dim tong 1-5 ghi 14500 tren KT-01
             "KHOP-CAODO-VITRI", "KHOP-CAODO-VITRI",   # +3.600 (2 ben) tren KT-05
             "KHOP-CAODO", "KHOP-CAODO",               # dinh 10.2 vs 10.5 + 7.200/7.150
             "KHOP-CAODO-MB"])                          # +3.550 tren mat bang
