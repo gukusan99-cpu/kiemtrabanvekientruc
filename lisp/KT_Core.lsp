@@ -103,7 +103,8 @@
                (setq o (vlax-ename->vla-object en))
                (vla-GetBoundingBox o 'mn 'mx)
                (list (kt:2d (vlax-safearray->list mn))
-                     (kt:2d (vlax-safearray->list mx))))))
+                     (kt:2d (vlax-safearray->list mx))))
+            nil))
   (if (vl-catch-all-error-p r)
     (progn
       (setq ed (entget en) p (kt:dxf 10 ed))
@@ -132,7 +133,7 @@
 (defun kt:effname (en / r)
   ;; ten that cua block (ho tro dynamic block)
   (setq r (vl-catch-all-apply
-            '(lambda () (vla-get-EffectiveName (vlax-ename->vla-object en)))))
+            '(lambda () (vla-get-EffectiveName (vlax-ename->vla-object en))) nil)) ; lisplint: ignore=RISKY
   (if (or (vl-catch-all-error-p r) (null r))
     (kt:dxf 2 (entget en))
     r)
@@ -385,15 +386,22 @@
     (repeat (setq i (sslength ss)) (entdel (ssname ss (setq i (1- i))))))
 )
 
+(defun kt:doc (/ r)
+  ;; ActiveDocument hoac nil (CAD khong ho tro ActiveX)
+  (setq r (vl-catch-all-apply
+            '(lambda () (vla-get-ActiveDocument (vlax-get-acad-object))) nil)) ; lisplint: ignore=RISKY
+  (if (vl-catch-all-error-p r) nil r)
+)
+
 (defun kt:finish (module / doc lst ss codes n)
   ;; ve lai danh dau, in tom tat cua module, chon doi tuong loi
-  (setq doc (vla-get-ActiveDocument (vlax-get-acad-object)))
-  (vl-catch-all-apply 'vla-StartUndoMark (list doc))
+  (setq doc (kt:doc))
+  (if doc (vl-catch-all-apply 'vla-StartUndoMark (list doc)))
   (kt:clear-marks)
   (setq *KT:ISSUES* (append *KT:ISSUES* (reverse *KT:PEND*)) *KT:PEND* nil)
   (if *KT:ISSUES* (kt:mklayer))
   (foreach x *KT:ISSUES* (kt:mark x))
-  (vl-catch-all-apply 'vla-EndUndoMark (list doc))
+  (if doc (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
   (setq lst (vl-remove-if-not '(lambda (x) (= (car x) module)) *KT:ISSUES*))
   (princ (strcat "\n=== [" module "] phat hien " (itoa (length lst)) " muc ==="))
   (foreach x lst (if (not (member (cadr x) codes)) (setq codes (cons (cadr x) codes))))

@@ -86,7 +86,7 @@ class TestTokenizer(Base):
         self.assertNoErrors(iss)
 
     def test_tokens(self):
-        toks = lisplint.tokenize(r'(a "x\"y" \'(1 . 2) ;c' + "\n" + r'b) ;|z|; 1e-9 .5', "t", [],
+        toks = lisplint.tokenize('(a "x\\"y" \'(1 . 2) ;c\nb) ;|z|; 1e-9 .5', "t", [],
                                  {"extern": set(), "ignore": {}})
         kinds = [t.kind for t in toks]
         self.assertEqual(kinds, ["LP", "SYM", "STR", "QUOTE", "LP", "NUM", "DOT", "NUM", "RP",

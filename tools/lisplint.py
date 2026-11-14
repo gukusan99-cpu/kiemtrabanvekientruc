@@ -478,7 +478,8 @@ class Project:
 
     # ---------------- nap file ----------------
     def load(self, path, display):
-        raw = open(path, "rb").read()
+        with open(path, "rb") as fh:
+            raw = fh.read()
         try:
             text = raw.decode("utf-8-sig")
         except UnicodeDecodeError:
@@ -890,4 +891,8 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except BrokenPipeError:  # vd. ... | head
+        sys.stderr.close()
+        sys.exit(1)
