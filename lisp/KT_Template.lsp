@@ -509,7 +509,7 @@
         (if (not (member k seen))
           (setq seen (cons k seen)
                 lst  (cons (list (ktmau:natkey (nth 5 f)) (nth 5 f) (nth 6 f)) lst))))))
-  (foreach x (ktmau:msort (reverse lst) '(lambda (a b) (< (car a) (car b)))))
+  (foreach x (ktmau:msort (reverse lst) '(lambda (a b) (< (car a) (car b))))
     (setq res (cons (ktmau:row "DANHMUC" (list (nth 1 x) (nth 2 x))) res)))
   (reverse res)
 )
@@ -531,7 +531,7 @@
     (if (and (nth 2 v) (> (nth 2 v) 0))
       (setq scales (cons (ktmau:rnd-scale (nth 2 v)) scales))))
   (setq tot 0)
-  (foreach en (kt:ss-all '((0 . "TEXT,MTEXT")))
+  (foreach en (kt:ss-all '((0 . "TEXT,MTEXT") (-4 . "<NOT") (8 . "KT_CHECK") (-4 . "NOT>")))
     (setq ed (entget en)
           sp (kt:space ed)
           h  (kt:dxf 40 ed)
@@ -587,7 +587,9 @@
     "; DUNG_SAI_KICH_THUOC: dung sai (mm) khi so khop kich thuoc / truc / cao do."
     "SETTING|DUNG_SAI_KICH_THUOC|1"
     "; LAYER_BO_QUA: layer khong kiem tra (wildcard, cach nhau dau phay)."
-    "SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,*|*"
+    ";   KHONG ghi mau *|* (dau | la ky tu phan cach truong -> bi tach thanh '*' = MOI layer)."
+    ";   Layer xref (ten co |) luon duoc bo qua."
+    "SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK"
     "; FONT_CHO_PHEP: file font (.shx/.ttf) duoc phep dung trong textstyle."
     (ktmau:row "SETTING" (list "FONT_CHO_PHEP" (kt:join fonts ","))))
 )

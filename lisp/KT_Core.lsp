@@ -32,10 +32,10 @@
   (reverse (cons (kt:trim s) res))
 )
 
-(defun kt:join (lst d / res)
-  (setq res "")
+(defun kt:join (lst d / res first)
+  (setq res "" first T)
   (foreach x lst
-    (setq res (strcat res (if (= res "") "" d) (kt:str x))))
+    (setq res (strcat res (if first "" d) (kt:str x)) first nil))
   res
 )
 
@@ -58,8 +58,11 @@
 
 (defun kt:wcmatch-any (s pats / ok)
   ;; s khop 1 trong cac mau wildcard (danh sach chuoi)
-  (setq s (strcase s))
-  (foreach p pats (if (and (not ok) (wcmatch s (strcase p))) (setq ok T)))
+  (if (= (type s) 'STR)
+    (progn
+      (setq s (strcase s))
+      (foreach p pats
+        (if (and (not ok) (= (type p) 'STR) (/= p "") (wcmatch s (strcase p))) (setq ok T)))))
   ok
 )
 
@@ -201,13 +204,21 @@
 
 (defun kt:cfg-row (sec name)
   ;; dong dau tien cua muc sec co truong 1 = name (khong phan biet hoa thuong)
-  (car (vl-remove-if-not '(lambda (r) (= (strcase (car r)) (strcase name))) (kt:cfg sec)))
+  (if (= (type name) 'STR)
+    (car (vl-remove-if-not
+           '(lambda (r) (and (car r) (= (strcase (car r)) (strcase name))))
+           (kt:cfg sec))))
 )
 
 (defun kt:cfg-val (key def / r)
-  ;; SETTING|KEY|gia tri
-  (if (and (setq r (kt:cfg-row "SETTING" key)) (cadr r) (/= (cadr r) ""))
-    (cadr r)
+  ;; SETTING|KEY|gia tri  (gia tri duoc phep chua '|', vd *|* -> noi lai)
+  (if (setq r (kt:cfg-row "SETTING" key))
+    (progn
+      (setq r (reverse (cdr r)))
+      (while (and r (= (car r) "")) (setq r (cdr r)))   ; bo truong rong cuoi dong
+      (setq r (reverse r))))
+  (if (and r (/= (setq r (kt:join r "|")) ""))
+    r
     def)
 )
 
@@ -329,7 +340,8 @@
   ;; goi dau moi lenh kiem tra: xoa loi cu cua module do
   (kt:reset-cache)
   (kt:clear-module module)
-  (setq *KT:PEND* nil *KT:CNT* nil)
+  (setq *KT:PEND* nil *KT:CNT* nil
+        *KT:CAP* (fix (kt:cfg-num "MAX_LOI_MOI_MA" 300)))
 )
 
 (defun kt:add (module code sev msg ens pt r / sp key c)
@@ -338,7 +350,7 @@
   (setq key (strcat module ":" code)
         c   (1+ (cond ((cdr (assoc key *KT:CNT*))) (0)))
         *KT:CNT* (cons (cons key c) (vl-remove (assoc key *KT:CNT*) *KT:CNT*)))
-  (if (<= c (fix (kt:cfg-num "MAX_LOI_MOI_MA" 300)))
+  (if (<= c (cond (*KT:CAP*) (300)))
     (progn
       (setq sp (if (car ens) (kt:space (entget (car ens))) (kt:cur-space)))
       (if (and (null pt) (car ens)) (setq pt (kt:cen (car ens))))

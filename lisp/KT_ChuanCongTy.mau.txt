@@ -1,0 +1,104 @@
+;;; ============================================================
+;;; KT_ChuanCongTy.mau.txt - FILE MAU (MINH HOA), KHONG PHAI CHUAN THAT.
+;;; Day la file mau, hay chay KTMAU tren ban ve mau cong ty de tao file that
+;;; (KT_ChuanCongTy.txt). Co the copy file nay thanh KT_ChuanCongTy.txt de chay thu.
+;;; ------------------------------------------------------------
+;;; Dinh dang: moi dong  MUC|truong1|truong2|...   ; dong bat dau ';' la ghi chu
+;;;   LAYER|ten|mau(1-255)|linetype|lineweight(1/100mm, -3=mac dinh)|plot(1/0)
+;;;   DIMSTYLE|ten|dimscale|dimlfac|dimtxt|dimasz|textstyle|dimdec|annotative(1/0)
+;;;   TEXTSTYLE|ten|font|bigfont|chieu cao co dinh(0=khong co dinh)|width factor
+;;;   KHUNG|ten block|tag so hieu|tag ten ban ve|tag ty le|ty le goc (nhan voi scale X)|tag khac...
+;;;   BLOCK|ten block|vai tro (TRUC/CAODO/MATCAT/CHITIET/CUA/KHAC)|tag chinh
+;;;   LAYOUT|ten layout
+;;;   DANHMUC|so hieu|ten ban ve
+;;;   SETTING|KHOA|gia tri
+;;; ============================================================
+
+; ---------- SETTING ----------
+; CAO_CHU_GIAY: chieu cao chu IN TREN GIAY cho phep (mm) = chieu cao that / ty le.
+SETTING|CAO_CHU_GIAY|1.8,2.0,2.5,3.0,3.5,5.0
+; TY_LE_CHO_PHEP: mau so ty le duoc phep (100 = 1/100).
+SETTING|TY_LE_CHO_PHEP|1,2,5,10,20,25,50,75,100,150,200,250,500
+; LAYER_MAU_BYLAYER: 1 = doi tuong bat buoc mau/linetype ByLayer, 0 = khong kiem.
+SETTING|LAYER_MAU_BYLAYER|1
+; MAX_LOI_MOI_MA: so loi toi da ghi nhan cho moi ma loi.
+SETTING|MAX_LOI_MOI_MA|300
+; DUNG_SAI_KICH_THUOC: dung sai (mm) khi so khop kich thuoc / truc / cao do.
+SETTING|DUNG_SAI_KICH_THUOC|1
+; LAYER_BO_QUA: layer khong kiem tra (wildcard, cach nhau dau phay).
+;   KHONG ghi mau *|* (dau | la ky tu phan cach truong -> bi tach thanh '*' = MOI layer).
+;   Layer xref (ten co |) luon duoc bo qua.
+SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK
+; FONT_CHO_PHEP: file font duoc phep dung trong textstyle.
+SETTING|FONT_CHO_PHEP|arial.ttf,romans.shx,vntime.shx,hztxt.shx
+
+; ---------- LAYER: ten|mau|linetype|lineweight|plot ----------
+LAYER|0|7|Continuous|-3|1
+LAYER|Defpoints|7|Continuous|-3|0
+LAYER|KT-TUONG|7|Continuous|50|1
+LAYER|KT-TUONG-NHE|8|Continuous|25|1
+LAYER|KT-COT|7|Continuous|50|1
+LAYER|KT-CUA|4|Continuous|18|1
+LAYER|KT-CAU THANG|3|Continuous|18|1
+LAYER|KT-THIET BI|6|Continuous|13|1
+LAYER|KT-HATCH|8|Continuous|9|1
+LAYER|KT-DIM|1|Continuous|13|1
+LAYER|KT-TEXT|2|Continuous|18|1
+LAYER|KT-TRUC|1|CENTER|13|1
+LAYER|KT-CAODO|3|Continuous|13|1
+LAYER|KT-KYHIEU|3|Continuous|13|1
+LAYER|KT-AN|8|HIDDEN|13|1
+LAYER|KT-KHUNG|7|Continuous|35|1
+LAYER|KT-VIEWPORT|8|Continuous|-3|0
+
+; ---------- DIMSTYLE: ten|dimscale|dimlfac|dimtxt|dimasz|textstyle|dimdec|annotative ----------
+DIMSTYLE|1-20|20|1|2|1.5|KT-DIM|0|0
+DIMSTYLE|1-25|25|1|2|1.5|KT-DIM|0|0
+DIMSTYLE|1-50|50|1|2|1.5|KT-DIM|0|0
+DIMSTYLE|1-100|100|1|2|1.5|KT-DIM|0|0
+DIMSTYLE|1-200|200|1|2|1.5|KT-DIM|0|0
+DIMSTYLE|PAPER|1|1|2|1.5|KT-DIM|0|0
+
+; ---------- TEXTSTYLE: ten|font|bigfont|cao co dinh|width ----------
+TEXTSTYLE|Standard|arial.ttf||0|1
+TEXTSTYLE|KT-TEXT|vntime.shx|hztxt.shx|0|0.8
+TEXTSTYLE|KT-DIM|romans.shx||0|0.8
+TEXTSTYLE|KT-TIEUDE|arial.ttf||0|1
+
+; ---------- KHUNG: block|tag so hieu|tag ten|tag ty le|ty le goc|tag khac... ----------
+KHUNG|KHUNG_A3|SOHIEU|TENBANVE|TYLE|1|CONGTRINH|DIADIEM|NGAY|THIETKE|KIEM|CHUTRI
+KHUNG|KHUNG_A1|SOHIEU|TENBANVE|TYLE|1|CONGTRINH|DIADIEM|NGAY|THIETKE|KIEM|CHUTRI
+
+; ---------- BLOCK: ten|vai tro|tag chinh ----------
+BLOCK|KH_TRUC|TRUC|TENTRUC
+BLOCK|KH_CAODO|CAODO|CAODO
+BLOCK|KH_MATCAT|MATCAT|KYHIEU
+BLOCK|KH_CHITIET|CHITIET|KYHIEU
+BLOCK|KH_CUA|CUA|KYHIEU
+BLOCK|TIEUDE_HINH|KHAC|TENHINH
+
+; ---------- LAYOUT ----------
+LAYOUT|KT-00
+LAYOUT|KT-01
+LAYOUT|KT-02
+LAYOUT|KT-03
+LAYOUT|KT-04
+LAYOUT|KT-05
+LAYOUT|KT-06
+LAYOUT|KT-07
+LAYOUT|KT-08
+LAYOUT|KT-09
+LAYOUT|KT-10
+
+; ---------- DANHMUC: so hieu|ten ban ve ----------
+DANHMUC|KT-00|BIA VA DANH MUC BAN VE
+DANHMUC|KT-01|MAT BANG TONG THE
+DANHMUC|KT-02|MAT BANG TANG 1
+DANHMUC|KT-03|MAT BANG TANG 2
+DANHMUC|KT-04|MAT BANG TANG MAI
+DANHMUC|KT-05|MAT DUNG TRUC 1-5
+DANHMUC|KT-06|MAT DUNG TRUC A-D
+DANHMUC|KT-07|MAT CAT 1-1
+DANHMUC|KT-08|MAT CAT 2-2
+DANHMUC|KT-09|CHI TIET CAU THANG
+DANHMUC|KT-10|CHI TIET WC VA THONG KE CUA
