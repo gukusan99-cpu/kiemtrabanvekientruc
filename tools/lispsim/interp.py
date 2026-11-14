@@ -46,6 +46,8 @@ class Interp:
         self.SLASH = self.intern("/")
         self._install_specials()
         self._install_builtins()
+        self.setv("PI", math.pi)
+        self.setv("PAUSE", "\\")
 
     # ------------------------------------------------------------ symbols
     def intern(self, name):

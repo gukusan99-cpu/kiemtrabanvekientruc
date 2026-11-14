@@ -24,6 +24,9 @@ class Ans:
         return "Ans(%r, %r)" % (self.value, self.match)
 
 
+CANCEL = object()   # Ans(CANCEL) = nguoi dung nhan ESC
+
+
 class VFS:
     """He thong file ao: duong dan Windows "C:\\a\\b" -> <root>/C/a/b (khong phan biet hoa thuong)"""
 
@@ -847,6 +850,9 @@ def install(I, dwg, vfs, mode="acad"):
             if ans.match and ans.match.lower() not in (prompt or "").lower():
                 raise LispError("lispsim: kich ban nhap lieu lech: cho prompt chua '%s' nhung gap '%s'"
                                 % (ans.match, (prompt or "").strip()), "sim")
+            if ans.value is CANCEL:
+                I.emit("*Cancel*")
+                raise LispError("Function cancelled")
             I.emit("[" + to_str(ans.value, True) + "]")
             return ans.value
 

@@ -111,3 +111,52 @@ norm MTEXT, xform, pts-box) -> dung ket qua mong doi. Phan can CSDL ban ve (entg
 - KTMAU: DIMSTYLE entget co the bo nhom co gia tri mac dinh -> mac dinh ISO (2.5) duoc ghi; ban ve mau imperial se sai.
 - LAYER-0/MAU-BYOBJ/LAYER-LA co the cung bao 1 doi tuong (3 dong) - co chu y, moi ma 1 y nghia.
 - KT_Load: nap qua APPLOAD tu thu muc ngoai Support path va khong dat *KT:HOME* -> hoi duong dan moi lan mo ban ve (Startup Suite).
+
+## Reviewer 3 - KT_Sheet.lsp, KT_Match.lsp, tests/sim_match.py, docs/MATCH_NOTES.md
+
+Kiem: `python3 tools/lisplint.py lisp/` -> 0 ERROR; `python3 -I tests/sim_match.py` -> DAT (10 kich ban, them 6 kich
+ban bao nham + ham chuoi). Ham chuoi chep lai (`*:plain/hex/uchar/unaccent/norm/msort/uniq/txt`) da bo, dung ham loi
+(`kt:norm` xu ly CP1258); chi giu bo giai ma font TCVN3 (ABC) lam du phong (`ktsh:tcvn3`, `ktmat:tcvn3`).
+
+### Bug / bao nham da sua
+| # | Muc | File / ham | Van de | Cach sua |
+|---|---|---|---|---|
+| 1 | CAO (bao nham hang loat) | KT_Match chk-lvcross | Cao do DINH khac nhau giua mat dung / mat cat bi CANHBAO - thuc te HOP LE (mat cat qua tum thang +13.500, mat dung toi tuong chan mai) | Tat mac dinh; `KHOP_CAODO_DINH=1` -> GOIY |
+| 2 | CAO (bao nham LOI) | KT_Match chk-lvpos | Vi tri TEXT cao do: chu dat cach vach tuy tay (10-50mm) -> LOI hang loat | Mac dinh chi xet block cao do; `KHOP_CAODO_TEXT=1` de bat |
+| 3 | CAO (bao nham LOI) | KT_Match chk-lvpos | Mat dung xep chong khong ghi +-0.000 -> moi ky hieu gan vao moc mat kia -> LOI | Gom theo "moc ngam dinh" Y-1000V; cum >=2 gia tri lech moc >1m = hinh khac, bo qua. Bat duoc them loi copy ky hieu +7.200 xuong san +3.600 quen sua so |
+| 4 | CAO (bao nham LOI) | KT_Match chk-axes/chk-dims/chk-lvpos | Chi tiet 1/20 ve phong to x5 trong khung 1/100 (DIMLFAC 0.2): KHOP-TRUC + KHOP-DIMTRUC + CAODO-VITRI tren moi truc/dim/cao do | Nhan he so phong to "tron" (2..50, moi cap cung he so) -> GOIY `KHOP-PHONGTO`, bo khoi bo phieu; dim so voi khoang cach x DIMLFAC |
+| 5 | CAO (bao nham LOI) | KT_Match chk-axes | Chi tiet (khong phai MB/MD/MC) ve truc co net ngat (khoang cach rut ngan) tham gia bo phieu | Chi MB/MD/MC bo phieu; `KHOP_TRUC_MOI_BAN_VE=1` de xet tat ca |
+| 6 | TB (bao nham LOI) | KT_Match unit-seqs | Mat bang mai chi co truc 2..4 dat canh mat bang tang trong 1 khung -> KHOP-TRUNGTRUC (chi tach khi ten lap la truc dau/cuoi) | Tach khi khoang ho > 1.5 nhip trung vi, bat ke ten |
+| 7 | TB (bao nham LOI) | KT_Match chk-dims | Dim ghi de theo m (`3.6`) tren truc 3600 -> LOI | Chap nhan x1000 |
+| 8 | TB | KT_Match collect | Tu nhan ky hieu truc (1 attribute + CIRCLE) bat ca block mat cat/chi tiet da cau hinh | Bo block co vai tro khac trong muc BLOCK |
+| 9 | TB | KT_Match dimlfac | Doc XData DSTYLE tung phan tu (gia tri 144 cua ma khac bi hieu la ma DIMLFAC) | Doc theo cap sau `{` |
+| 10 | TB | KT_Match/Sheet flags, TRUNGTEN, DANHMUC | Ten ban ve tach 2 tag (TENBANVE1 "MAT BANG" + TENBANVE2 "TANG 1") -> TRUNGTEN nham, khong khop danh muc | `*:ftitle` gop cac tag cung goc; danh muc chap nhan 1 ten chua ten kia |
+| 11 | TB | ca 2 | Font TCVN3 (.VnTimeH: "mÆt b»ng") -> khong nhan loai ban ve (chi kiem truc), sai so ten | Giai ma TCVN3 khi chuoi co byte dac trung (khong dung voi Latin-1/CP1258); `%%u %%o %%k` bi bo |
+| 12 | TB (bao nham) | KT_Match chk-lvplan | Moi cao do mat bang khong co tren mat cat -> GOIY (WC -50, san, ban cong...) | Mac dinh chi bao gia tri GAN 1 cao do mat cat (nghi ghi nham); `KHOP_CAODO_MB` 0/1/2. CAODO lech: CANHBAO chi khi gia tri co tren mat bang, con lai GOIY |
+| 13 | CAO (bao nham LOI) | KT_Sheet chk-thieu | Moi attribute trong (LAN SUA, GHI CHU, NGAY SUA...) -> LOI moi khung | Tag so/ten/ty le trong -> LOI; tag khac chi CANHBAO khi >= 1/2 khung khac da dien |
+| 14 | CAO (bao nham) | KT_Sheet chk-nhayso | Ho so tach nhieu file -> nhay so; A-101/A-201 bao thieu 102..200 | GOIY; so >= 3 chu so xet tung tram |
+| 15 | CAO (bao nham) | KT_Sheet chk-danhmuc | Ho so tach file: moi ban ve danh muc khong co khung -> CANHBAO tung dong | > 1/2 thieu -> 1 dong GOIY |
+| 16 | TB (bao nham) | KT_Sheet dm-rows | Ghi chu "XEM DANH MUC..." bi coi la tieu de -> so hieu trong ghi chu thanh dong danh muc | Tieu de phai bat dau bang DANHMUC (vi tri <= 6, "BANG DANH MUC") |
+| 17 | TB (bao nham) | KT_Sheet dm-rows | Danh muc 2 cot canh nhau: ten = o dai nhat CA hang (lay ten cot ben kia) | Ten = o hop le gan nhat theo X; TABLE doc DXF (cot lech khi o rong) -> bo ten |
+| 18 | CAO (bao nham LOI) | KT_Sheet chk-thamchieu | Ky hieu tro toi ban ve KC-.. (ket cau) hoac ban ve o file khac -> LOI | Chi xet cung tien to; co trong danh muc = co; trong khoang so -> CANHBAO, ngoai -> GOIY. Kiem "MAT CAT x-x" chi khi ky hieu tro toi ban ve trong file; "MAT CAT A-A VA B-B" nhan B |
+| 19 | TB (bao nham) | KT_Sheet chk-tyle | "NHU HINH", "-" -> LOI khong doc duoc; ghi nhieu ty le "1/100; 1/20" chi so ty le dau; he so goc sai -> LOI moi khung | Khong co chu so -> bo qua; co -> GOIY; khop 1 trong cac ty le la du; moi khung lech cung ti so -> 1 CANHBAO; TY_LE_CHO_PHEP -> CANHBAO |
+| 20 | CAO (hieu nang + bao nham) | KT_Sheet chk-ngoai | (a) Hinh ve Model duoc viewport layout nhin thay van bi coi la "ngoai khung"; (b) xref/block chen 0,0; (c) 100k doi tuong: `kt:wcmatch-any` + `subst` toan danh sach o moi doi tuong, toi 200 dong GOIY | Vung trong = khung + vung viewport; INSERT ngoai -> xet tam hop bao; loc layer 1 `wcmatch`; o vua dung o dau danh sach (O(1) khi doi tuong lien tiep cung o); bao 20 o + 1 dong tong |
+| 21 | TB (kieu) | KT_Sheet chk-danhmuc | Tra ve so nguyen (ket qua kt:add) khi so hieu chi co chu so -> KHUNG-THAMCHIEU `assoc` tren so -> loi | Luon tra ve list hoac nil |
+
+### Da kiem, khong thay loi
+- `strcat` voi nil: moi gia tri attribute/ten qua `kt:str`/`kt:trim`; `ktsh:norm`/`ktmat:norm` chiu nil.
+- Chia nguyen: `ktmat:lvstr`, merge sort, `ktsh:chk-nhayso` (/ so 100) co chu dich; trung binh khung dung `float`.
+- ATTRIB/SEQEND: `kt:attribs` (loi) dung o SEQEND, chi doc khi 66=1. Block dong *U: `kt:effname` + du phong XData.
+- Khung Model vs layout: KHUNG-TYLE so layout voi VP trong khung; KHUNG-NGOAI chi Model; KTKHOP bo VP nhin vao vung da co.
+- Cao do `%%p0.000`, `+-0.000` (chr 177 / \U+00B1), `+3,600`, `COS +3.600`, `-0.450` doc dung; so hieu `KT-01` = `KT.01` = `KT 01`.
+
+### Con ngo / chua kiem duoc (can chay that)
+- TCVN3: bang ma lay theo tri nho (0xA1-0xFE); chu HOA co dau trong font thuong (.VnTime) khong co ma -> chi giai dung chu
+  thuong / font H. Font VNI (2 byte / chu) chua ho tro: "MAT DUNG" go VNI khong nhan duoc loai ban ve.
+- KHOP-PHONGTO dua tren gia tri nho nhat cua ban ve khac; neu chi co 1 mat bang + 1 chi tiet x2 do sai that dung bang
+  he so 2 thi loi bi bo qua (GOIY).
+- Ky hieu cao do copy sai o CA 2 ben mat cat cung gia tri van bat duoc; neu mot mat dung xep chong chi co 1 ky hieu khong
+  phai 0 thi ky hieu do bi bao (khong biet la hinh khac).
+- TABLE tren VinaCAD: chua xac nhan `vla-get-Rows/GetText`; DXF du phong khong tin ten.
+- KHUNG-NGOAI 100k: con `entget` moi doi tuong (~1-2s), `kt:cen` cho INSERT/HATCH ngoai vung (ActiveX) - chua do thuc te.
+- Chua co docs/QA_RUNTIME.md khi ket thuc -> chua doi chieu bug runtime.

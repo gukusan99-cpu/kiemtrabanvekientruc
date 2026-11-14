@@ -23,6 +23,10 @@ class RunResult:
         self.errors, self.caught, self.sim_bugs = errors, caught, sim_bugs
         self.prompts, self.commands = prompts, commands
 
+    def real_caught(self):
+        """loi bi vl-catch-all-apply bat, tru loi 'no function definition: VLA-*' (du phong VinaCAD)"""
+        return [e for e in self.caught if not is_vla_noise(e)]
+
     @property
     def ok(self):
         return self.error is None and not self.errors
@@ -32,11 +36,19 @@ class RunResult:
         for e in self.errors:
             lines.append("LOI-KHONG-BAT [%s] %s  @%s  stack=%s" % (e.kind, e.msg, _where(e), " > ".join(e.stack or [])))
         if include_caught:
-            for e in self.caught:
+            vla = [e for e in self.caught if is_vla_noise(e)]
+            if vla:
+                lines.append("(%d loi ActiveX bi bat - duong du phong, bo qua)" % len(vla))
+            for e in self.real_caught():
                 lines.append("loi-bi-bat [%s] %s  @%s  stack=%s" % (e.kind, e.msg, _where(e), " > ".join(e.stack or [])))
         for b in self.sim_bugs:
             lines.append("SIM-BUG %s @%s stack=%s" % (b[0], b[2], " > ".join(b[1])))
         return "\n".join(lines)
+
+
+def is_vla_noise(e):
+    m = e.msg.upper()
+    return m.startswith("NO FUNCTION DEFINITION: VLA") or "ACTIVEX SERVER RETURNED" in m
 
 
 def _where(e):
@@ -49,7 +61,7 @@ def _where(e):
 class Session:
     def __init__(self, dwg, mode="acad", lispdir=None, root=None, cfg_text=None):
         here = os.path.dirname(os.path.abspath(__file__))
-        self.lispdir = lispdir or os.path.normpath(os.path.join(here, "..", "..", "lisp"))
+        self.lispdir = lispdir or os.environ.get("LISPSIM_LISPDIR") or os.path.normpath(os.path.join(here, "..", "..", "lisp"))
         self.root = root or tempfile.mkdtemp(prefix="lispsim_")
         self.dwg = dwg
         self.mode = mode

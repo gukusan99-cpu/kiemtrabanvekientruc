@@ -462,6 +462,59 @@ def scenario_level_copy():
     return run([p1, sec, el])
 
 
+# ---------------------------------------------------------------- KT_Sheet (ham chuoi)
+def tcvn3(sv):
+    """ktsh:tcvn3 / ktmat:tcvn3: chuoi font TCVN3 -> ASCII HOA, None neu khong phai TCVN3"""
+    viet = {176, 177, 178, 179, 215, 216, 222, 192, 193, 194, 195, 200, 201, 202, 204, 205, 208, 210,
+            211, 212, 213, 217, 218, 221, 224, 225, 226, 227, 232, 233, 234, 236, 237, 240, 242, 243,
+            244, 245, 249, 250, 253}
+    cs = [ord(c) for c in sv]
+    if not any(161 <= c <= 254 and c not in viet for c in cs):
+        return None
+
+    def tc(c):
+        if c in (161, 162, 168, 169) or 181 <= c <= 185 or 187 <= c <= 190 or 198 <= c <= 203:
+            return "A"
+        if c in (167, 174):
+            return "D"
+        if c in (163, 170) or 204 <= c <= 214:
+            return "E"
+        if 215 <= c <= 222:
+            return "I"
+        if c in (164, 165, 171, 172) or 223 <= c <= 238:
+            return "O"
+        if c in (166, 173) or 239 <= c <= 249:
+            return "U"
+        if 250 <= c <= 254:
+            return "Y"
+        return ""
+    return "".join(chr(c).upper() if c < 128 else tc(c) for c in cs)
+
+
+def nhayso_key(sohieu):
+    """ktsh:chk-nhayso: khoa nhom = tien to + (tram neu so >= 3 chu so)"""
+    i = len(sohieu)
+    while i > 0 and sohieu[i - 1].isdigit():
+        i -= 1
+    num = sohieu[i:]
+    pre = "".join(c for c in sohieu[:i].upper() if c.isalnum())
+    return pre + "|" + (str(int(num) // 100) if len(num) >= 3 else "")
+
+
+def check_sheet_helpers():
+    ok = True
+    for raw, want in (("m\xc6t b\xbbng t\xc7ng 1", "MATBANGTANG1"),   # TCVN3 .VnTimeH
+                      ("M\xc6T \xae\xf8ng", "MATDUNG"),
+                      ("m\xc6t c\xbet 1-1", "MATCAT11")):
+        got = "".join(c for c in (tcvn3(raw) or "") if c.isalnum())
+        ok &= got == want
+    ok &= tcvn3("\xb10.000") is None and tcvn3("M\xc0T") is None        # +-, Latin-1/CP1258
+    ok &= nhayso_key("A-101") != nhayso_key("A-201") and nhayso_key("KT-01") == nhayso_key("KT.02")
+    ok &= nhayso_key("KT 01") == nhayso_key("KT-09")
+    print("[%s] 10. Ham chuoi KT_Sheet (TCVN3, khoa nhay so)" % ("OK " if ok else "SAI"))
+    return ok
+
+
 def main():
     ok = True
 
@@ -499,6 +552,7 @@ def main():
     expect("8. Mat bang mai (truc 2..4) dat canh mat bang tang", scenario_roof_side(), [])
     expect("9. Copy cao do quen sua so / mat dung xep chong / TEXT / dim ghi m",
            scenario_level_copy(), ["KHOP-CAODO-VITRI"])
+    ok = check_sheet_helpers() and ok
     print("\nKET QUA:", "DAT" if ok else "KHONG DAT")
     return 0 if ok else 1
 
