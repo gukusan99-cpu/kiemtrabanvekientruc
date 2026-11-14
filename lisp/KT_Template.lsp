@@ -142,6 +142,42 @@
   r
 )
 
+(defun ktmau:guess-tags (atts / tags val tTen tTL tSo bad)
+  ;; atts = ((TAG . gia tri) ...) cua khung mau -> (tagSo tagTen tagTL)
+  ;; uu tien mau ten cu the; tag ty le phai co gia tri doc duoc "1/100"
+  (setq tags (mapcar 'car atts)
+        bad  '("*CONG*TRINH*" "*CT" "*_CT*" "*DU*AN*" "*HANG*MUC*" "*CHU*DAU*TU*" "*CDT*"
+               "*KHACH*" "*NGUOI*" "*THIET*KE*" "*KIEM*" "*DIA*DIEM*" "*NGAY*" "*DATE*"
+               "*PROJECT*" "*CLIENT*" "*SO*TO*" "*TONG*" "*SO*LUONG*"))
+  (defun val (tg) (cdr (assoc tg atts)))
+  ;; TY LE: tag co gia tri la ty le, uu tien ten
+  (setq tTL (ktmau:first-match
+              (vl-remove-if-not '(lambda (tg) (kt:parse-scale (val tg))) tags)
+              '("*TY*LE*" "*TYLE*" "*SCALE*" "TL" "TL*" "*_TL*" "*TL" "*") nil))
+  (if (null tTL)
+    (setq tTL (ktmau:first-match tags '("*TY*LE*" "*TYLE*" "*SCALE*" "TL" "TL_*" "*_TL") nil)))
+  ;; TEN BAN VE
+  (setq tTen (ktmau:first-match tags '("*TEN*BAN*VE*" "*TENBV*" "*TEN*BV*" "*BAN*VE*" "*TITLE*"
+                                       "*DRAW*NAME*" "*DWG*NAME*" "*TEN*HINH*") (list tTL)))
+  (if (null tTen)
+    (setq tTen (ktmau:first-match
+                 (vl-remove-if '(lambda (tg) (kt:wcmatch-any tg bad)) tags)
+                 '("*TEN*" "*NAME*") (list tTL))))
+  ;; SO HIEU: ten cu the truoc; tag chung chi nhan khi gia tri ngan va co chu so (KT-01, A101)
+  (setq tSo (ktmau:first-match tags '("*SO*HIEU*" "*SOHIEU*" "*SO*BV*" "*SO*BAN*VE*" "*KY*HIEU*BV*"
+                                      "*KH*BV*" "*MA*BV*" "*SHEET*NO*" "*DWG*NO*" "*DRAW*NO*" "*SHEET*")
+                               (list tTen tTL)))
+  (if (null tSo)
+    (setq tSo (ktmau:first-match
+                (vl-remove-if-not
+                  '(lambda (tg) (and (val tg) (<= (strlen (val tg)) 12) (wcmatch (val tg) "*#*")
+                                     (not (kt:parse-scale (val tg)))
+                                     (not (kt:wcmatch-any tg bad))))
+                  tags)
+                '("*SO*" "*SH*" "*KH*" "*NO*" "*BV*" "*MA*") (list tTen tTL))))
+  (list tSo tTen tTL)
+)
+
 (defun ktmau:xref-blk-p (nm / bd)
   ;; T neu block la xref (70 bit 4) hoac phu thuoc xref
   (and nm
@@ -306,37 +342,46 @@
 )
 
 ;;; ---------- KHUNG TEN ----------
-(defun ktmau:khung-cands (/ res nm key it sz nt)
-  ;; thong ke block co attribute: (KEY ten soluong kichthuoc-max sotag-max ename)
+(defun ktmau:khung-cands (/ raw spmax res nm key it sz nt sp r ed)
+  ;; thong ke block co attribute (ca xref / block khong attribute cung dua vao, uu tien thap):
+  ;; (KEY ten soluong kichthuoc-max sotag-max ename tyle-kichthuoc-max)
+  ;; tyle-kichthuoc = kich thuoc / block lon nhat CUNG KHONG GIAN (khung o layout don vi giay
+  ;; nho hon ky hieu o Model ve 1/100 -> khong so kich thuoc giua 2 khong gian)
   (foreach en (kt:ss-all '((0 . "INSERT") (66 . 1)))
     (setq nm (kt:effname en))
     (if (and nm (not (ktmau:xref-blk-p nm)))
-      (progn
-        (setq key (strcase nm)
-              sz  (kt:boxsize en)
-              nt  (length (kt:attribs en))
-              it  (assoc key res))
-        (if it
-          (setq res (subst (list key (nth 1 it) (1+ (nth 2 it))
-                                 (max sz (nth 3 it)) (max nt (nth 4 it))
-                                 (if (> sz (nth 3 it)) en (nth 5 it)))
-                           it res))
-          (setq res (cons (list key nm 1 sz nt en) res))))))
+      (setq ed (entget en)
+            sp (kt:space ed)
+            sz (kt:boxsize en)
+            raw (cons (list (strcase nm) nm sp sz (length (kt:attribs en)) en) raw)
+            it (assoc sp spmax)
+            spmax (if it
+                    (subst (cons sp (max sz (cdr it))) it spmax)
+                    (cons (cons sp sz) spmax)))))
+  (foreach x raw
+    (setq key (car x) nm (nth 1 x) sz (nth 3 x) nt (nth 4 x)
+          r   (/ sz (max 1e-9 (cdr (assoc (nth 2 x) spmax))))
+          it  (assoc key res))
+    (if it
+      (setq res (subst (list key (nth 1 it) (1+ (nth 2 it))
+                             (max sz (nth 3 it)) (max nt (nth 4 it))
+                             (if (> r (nth 6 it)) (nth 5 x) (nth 5 it))
+                             (max r (nth 6 it)))
+                       it res))
+      (setq res (cons (list key nm 1 sz nt (nth 5 x) r) res))))
   res
 )
 
-(defun ktmau:khung-guess (cands / pool mx best)
-  ;; uu tien block >= 3 tag; trong nhom co kich thuoc >= 50% lon nhat,
-  ;; chon block xuat hien nhieu nhat (bang nhau -> lon hon)
-  (setq pool (vl-remove-if-not '(lambda (c) (>= (nth 4 c) 3)) cands))
-  (if (null pool) (setq pool cands))
-  (setq mx 0.0)
-  (foreach c pool (setq mx (max mx (nth 3 c))))
-  (setq pool (vl-remove-if-not '(lambda (c) (>= (nth 3 c) (* 0.5 mx))) pool))
+(defun ktmau:khung-guess (cands / pool best)
+  ;; khung ten = block co attribute LON NHAT trong khong gian cua no (>= 50%),
+  ;; uu tien >= 3 tag; trong nhom chon block xuat hien nhieu nhat, roi nhieu tag hon
+  (setq pool (vl-remove-if-not '(lambda (c) (and (>= (nth 4 c) 3) (>= (nth 6 c) 0.5))) cands))
+  (if (null pool) (setq pool (vl-remove-if-not '(lambda (c) (>= (nth 6 c) 0.5)) cands)))
   (foreach c pool
     (if (or (null best)
             (> (nth 2 c) (nth 2 best))
-            (and (= (nth 2 c) (nth 2 best)) (> (nth 3 c) (nth 3 best))))
+            (and (= (nth 2 c) (nth 2 best)) (> (nth 4 c) (nth 4 best)))
+            (and (= (nth 2 c) (nth 2 best)) (= (nth 4 c) (nth 4 best)) (> (nth 6 c) (nth 6 best))))
       (setq best c)))
   best
 )
@@ -363,9 +408,14 @@
     (cond
       (sel
        (setq ed (entget (car sel)))
-       (if (and ed (= (kt:dxf 0 ed) "INSERT") (= (kt:dxf 66 ed) 1))
-         (setq en (car sel) blk (kt:effname en) ok T)
-         (princ "\nDoi tuong chon khong phai block co attribute. Chon lai.")))
+       (cond
+         ((and ed (= (kt:dxf 0 ed) "INSERT") (= (kt:dxf 66 ed) 1))
+          (setq en (car sel) blk (kt:effname en) ok T))
+         ((and ed (= (kt:dxf 0 ed) "INSERT"))
+          ;; khung khong co attribute (chu thuong) / xref: van nhan dien duoc vung + ty le
+          (setq en (car sel) blk (kt:effname en) ok T)
+          (princ "\nBlock khong co attribute: chi nhan dien vung khung + ty le (khong doc so hieu/ten)."))
+         (T (princ "\nDoi tuong chon khong phai block. Chon lai."))))
       ((null guess)
        (princ "\nKhong tim thay block co attribute nao -> bo qua muc KHUNG.")
        (setq blk nil ok T))
@@ -379,7 +429,7 @@
   (if (and blk en) (list blk en))
 )
 
-(defun ktmau:sec-khung (/ pk blk en tags tSo tTen tTL f others)
+(defun ktmau:sec-khung (/ pk blk en tags tSo tTen tTL f others g ed tsc sx fd)
   ;; tra ve (block tagSo tagTen tagTL tylegoc (tag khac...)) hoac nil
   (if (setq pk (ktmau:pick-khung))
     (progn
@@ -387,43 +437,60 @@
       (foreach a (kt:attribs en) (if (not (member (car a) tags)) (setq tags (cons (car a) tags))))
       (setq tags (reverse tags))
       (princ (strcat "\nKhung ten: " blk "\nCac tag: " (kt:join tags ", ")))
-      (setq tTen (ktmau:first-match tags '("*TEN*" "*TITLE*" "*NAME*") nil)
-            tTL  (ktmau:first-match tags '("*TL*" "*TY*LE*" "*SCALE*") (list tTen))
-            tSo  (ktmau:first-match tags '("*SO*" "*KH*" "*SH*" "*NO*" "*SHEET*") (list tTen tTL)))
+      (setq g    (ktmau:guess-tags (kt:attribs en))
+            tSo  (nth 0 g) tTen (nth 1 g) tTL (nth 2 g))
       (princ "\nXac nhan tag (Enter = dong y goi y, - = khong co, hoac go ten tag):")
       (setq tSo  (ktmau:ask-tag "SO HIEU ban ve" tSo tags)
             tTen (ktmau:ask-tag "TEN ban ve" tTen tags)
             tTL  (ktmau:ask-tag "TY LE" tTL tags))
-      (princ "\n(Neu khung ve kich thuoc giay that va scale X block = ty le thi nhap 1;")
-      (princ "\n neu khung da ve san o 1/100 voi scale X = 1 thi nhap 100.)")
+      ;; goi y he so goc = ty le ghi / scale X (khung o Model co ghi ty le)
+      (setq ed  (entget en)
+            sx  (abs (cond ((kt:dxf 41 ed)) (1.0)))
+            tsc (if (/= tTL "") (kt:parse-scale (kt:attval en tTL)))
+            fd  (if (and tsc (= (kt:space ed) "Model") (> sx 0))
+                  (ktmau:rnd-scale (/ tsc sx)) 1))
+      (princ "\n(Ty le goc: khung ve kich thuoc giay that, scale X block = ty le -> 1;")
+      (princ "\n khung da ve san o 1/100 voi scale X = 1 -> 100. Khung o layout -> 1.)")
+      (if (and tsc (= (kt:space ed) "Model"))
+        (princ (strcat "\n Khung mau: scale X = " (ktmau:fmt sx) ", ghi ty le 1/" (ktmau:fmt tsc)
+                       " -> goi y " (ktmau:fmt fd))))
       (initget 6)
-      (setq f (getreal "\nKhung ve o ty le 1:1 kich thuoc giay? (1 = scale X block la ty le) <1>: "))
-      (if (null f) (setq f 1.0))
+      (setq f (getreal (strcat "\nTy le goc (he so nhan voi scale X block) <" (ktmau:fmt fd) ">: ")))
+      (if (null f) (setq f fd))
       (foreach tg tags
         (if (not (member tg (list tSo tTen tTL))) (setq others (cons tg others))))
       (list blk tSo tTen tTL (float f) (reverse others))))
 )
 
-(defun ktmau:frames (kh / res ed sp bx tsc sc v1 v2)
+(defun ktmau:frames (kh / raw res ed sp bx tsc sct v1 v2 agree disagree)
   ;; cac khung ten cua block kh: (ename space minpt maxpt scale sohieu ten)
+  ;; scale: giong kt:frames - ty le thuc (|scale X| x he so goc), tru khi da so khung lech ty le ghi
+  (setq agree 0 disagree 0)
   (if kh
-    (foreach en (kt:ss-all '((0 . "INSERT") (66 . 1)))
-      (if (= (strcase (kt:effname en)) (strcase (car kh)))
+    (foreach en (kt:ss-all '((0 . "INSERT")))
+      (if (= (strcase (kt:str (kt:effname en))) (strcase (car kh)))
         (progn
           (setq ed  (entget en)
                 sp  (kt:space ed)
                 bx  (kt:box en)
                 tsc (if (/= (nth 3 kh) "") (kt:parse-scale (kt:attval en (nth 3 kh))))
-                sc  (cond ((/= sp "Model") 1.0)
-                          (tsc)
-                          (T (* (abs (cond ((kt:dxf 41 ed)) (1.0))) (nth 4 kh))))
+                sct (* (abs (cond ((kt:dxf 41 ed)) (1.0))) (nth 4 kh))
                 v1  (if (/= (nth 1 kh) "") (kt:attval en (nth 1 kh)))
                 v2  (if (/= (nth 2 kh) "") (kt:attval en (nth 2 kh))))
+          (if (and tsc (= sp "Model"))
+            (if (equal tsc sct (* 0.01 tsc)) (setq agree (1+ agree)) (setq disagree (1+ disagree))))
           (if bx
-            (setq res (cons (list en sp (car bx) (cadr bx) sc
-                                  (cond (v1) ("")) (cond (v2) ("")))
-                            res)))))))
-  (reverse res)
+            (setq raw (cons (list en sp (car bx) (cadr bx) sct
+                                  (cond (v1) ("")) (cond (v2) ("")) tsc)
+                            raw)))))))
+  (foreach f raw
+    (setq res (cons (list (nth 0 f) (nth 1 f) (nth 2 f) (nth 3 f)
+                          (cond ((/= (nth 1 f) "Model") 1.0)
+                                ((and (nth 7 f) (> disagree agree)) (nth 7 f))
+                                (T (nth 4 f)))
+                          (nth 5 f) (nth 6 f))
+                    res)))
+  res
 )
 
 (defun ktmau:frame-at (p sp frames / r)
@@ -434,12 +501,14 @@
 )
 
 ;;; ---------- BLOCK ky hieu ----------
-(defun ktmau:blk-role (nm)
+(defun ktmau:blk-role (nm has-att)
   (cond
     ((kt:wcmatch-any nm '("*TRUC*" "*AXIS*" "*GRID*")) "TRUC")
-    ((kt:wcmatch-any nm '("*CAODO*" "*CAO*DO*" "*LEVEL*" "*ELEV*" "*COT*")) "CAODO")
+    ((kt:wcmatch-any nm '("*CAODO*" "*CAO*DO*" "*LEVEL*" "*ELEV*" "*COS*")) "CAODO")
     ((kt:wcmatch-any nm '("*CHITIET*" "*CHI*TIET*" "*DETAIL*")) "CHITIET")
-    ((kt:wcmatch-any nm '("*MATCAT*" "*MAT*CAT*" "*CAT*" "*SECTION*" "*MAT*")) "MATCAT")
+    ((kt:wcmatch-any nm '("*MATCAT*" "*MAT*CAT*" "*SECTION*" "KH*CAT*" "*_CAT*" "CAT*")) "MATCAT")
+    ;; "COT" = cot (cao do) hoac cot (cot nha) -> chi coi la cao do khi block co attribute
+    ((and has-att (kt:wcmatch-any nm '("*COT*"))) "CAODO")
     ((kt:wcmatch-any nm '("*CUA*" "*DOOR*" "*WINDOW*")) "CUA")
     (T "KHAC"))
 )
@@ -475,10 +544,10 @@
       (progn
         (if (null tags) (setq tags (ktmau:attdefs nm)))
         (if (or tags
-                (kt:wcmatch-any nm '("*TRUC*" "*AXIS*" "*COT*" "*CAODO*" "*LEVEL*" "*CAT*"
-                                     "*SECTION*" "*CHITIET*" "*DETAIL*" "*MAT*")))
+                (kt:wcmatch-any nm '("*TRUC*" "*AXIS*" "*CAODO*" "*LEVEL*" "*MATCAT*" "*MAT*CAT*"
+                                     "*SECTION*" "*CHITIET*" "*DETAIL*")))
           (progn
-            (setq role (ktmau:blk-role nm))
+            (setq role (ktmau:blk-role nm (if tags T nil)))
             (setq res (cons (ktmau:row "BLOCK" (list nm role (ktmau:blk-maintag role tags)))
                             res)))))))
   (ktmau:sort-str res)
@@ -486,17 +555,18 @@
 
 ;;; ---------- LAYOUT ----------
 (defun ktmau:layouts (/ r d ed nm lst)
-  (if (ktmau:fnok layoutlist)
-    (setq r (vl-catch-all-apply 'layoutlist nil)))
-  (if (or (null r) (vl-catch-all-error-p r))
+  ;; ten layout theo THU TU TAB (DXF 71 cua LAYOUT); du phong layoutlist
+  (if (setq d (dictsearch (namedobjdict) "ACAD_LAYOUT"))
+    (foreach pr d
+      (if (and (= (car pr) 350) (= (type (cdr pr)) 'ENAME) (setq ed (entget (cdr pr))))
+        (if (and (setq nm (kt:dxf 1 ed)) (/= (strcase nm) "MODEL"))
+          (setq lst (cons (list (cond ((kt:dxf 71 ed)) (0)) nm) lst))))))
+  (if lst
+    (setq r (mapcar 'cadr (ktmau:msort (reverse lst) '(lambda (a b) (< (car a) (car b)))))))
+  (if (and (null r) (ktmau:fnok layoutlist))
     (progn
-      (setq r nil)
-      (if (setq d (dictsearch (namedobjdict) "ACAD_LAYOUT"))
-        (foreach pr d
-          (if (and (= (car pr) 350) (= (type (cdr pr)) 'ENAME) (setq ed (entget (cdr pr))))
-            (if (and (setq nm (kt:dxf 1 ed)) (/= (strcase nm) "MODEL"))
-              (setq lst (cons (list (cond ((kt:dxf 71 ed)) (0)) nm) lst))))))
-      (setq r (mapcar 'cadr (ktmau:msort lst '(lambda (a b) (< (car a) (car b))))))))
+      (setq r (vl-catch-all-apply 'layoutlist nil))
+      (if (vl-catch-all-error-p r) (setq r nil))))
   (vl-remove-if '(lambda (x) (= (strcase x) "MODEL")) r)
 )
 
@@ -547,7 +617,8 @@
                (if (and (not sc) (kt:inbox p (nth 3 v) (nth 4 v))) (setq sc (nth 2 v))))))
         (if (and sc (> sc 0))
           (progn
-            (setq v (/ (fix (+ (* 2.0 (/ h sc)) 0.5)) 2.0))
+            ;; lam tron 0.1mm (0.5mm lam mat 1.8 -> 2.0, KTTEXT dung sai 3% se bao nham chu 1.8)
+            (setq v (/ (fix (+ (* 10.0 (/ h sc)) 0.5)) 10.0))
             (if (> v 0)
               (progn
                 (setq tot (1+ tot) it (assoc v cnt))
@@ -571,11 +642,11 @@
   (setq hs (if heights heights '(1.8 2.0 2.5 3.0 3.5 5.0))
         scales (ktmau:sort-num
                  (ktmau:uniq-num
-                   (append (vl-remove-if-not 'numberp scales)
+                   (append (vl-remove-if-not '(lambda (x) (= (type x) 'INT)) scales)
                            '(1 2 5 10 20 25 50 75 100 150 200 250 500)))))
   (list
     "; CAO_CHU_GIAY: chieu cao chu IN TREN GIAY cho phep (mm) = chieu cao that / ty le."
-    (strcat ";   " (if heights "Thong ke tu ban ve mau (lam tron 0.5mm, gia tri chiem >5%)."
+    (strcat ";   " (if heights "Thong ke tu ban ve mau (lam tron 0.1mm, gia tri chiem >5%)."
                                "Khong thong ke duoc -> dung gia tri mac dinh."))
     (ktmau:row "SETTING" (list "CAO_CHU_GIAY" (kt:join (mapcar 'ktmau:fmt hs) ",")))
     "; TY_LE_CHO_PHEP: mau so ty le duoc phep (100 = 1/100). Gom ty le tim thay + ty le thong dung."
@@ -588,7 +659,9 @@
     "SETTING|DUNG_SAI_KICH_THUOC|1"
     "; LAYER_BO_QUA: layer khong kiem tra (wildcard, cach nhau dau phay)."
     ";   *|* = moi layer xref (KT_Core noi lai phan sau dau | cua gia tri SETTING)."
-    "SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,*|*"
+    "SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,CHECK_DIM_OVERLAP,*|*"
+    "; MAU_BYOBJ_BO_QUA: loai doi tuong duoc gan mau rieng (vd HATCH,DIM,TEXT). Bo ';' de dung."
+    ";SETTING|MAU_BYOBJ_BO_QUA|HATCH"
     "; FONT_CHO_PHEP: file font (.shx/.ttf) duoc phep dung trong textstyle."
     (ktmau:row "SETTING" (list "FONT_CHO_PHEP" (kt:join fonts ","))))
 )

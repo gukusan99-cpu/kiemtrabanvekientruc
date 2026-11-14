@@ -18,6 +18,20 @@ TOL = 1.0          # SETTING DUNG_SAI_KICH_THUOC (mm)
 TOL_LV = 5.0       # SETTING DUNG_SAI_CAO_DO (mm)
 NEAR_LV = 0.1      # SETTING CAODO_LECH_NGHI (m)
 TOL_V = 0.0011     # 2 gia tri cao do coi la bang nhau (m)
+# SETTING tuy chon (mac dinh = gia tri trong KT_Match.lsp)
+SET = {"KHOP_TRUC_MOI_BAN_VE": 0, "KHOP_CAODO_TEXT": 0, "KHOP_CAODO_DINH": 0, "KHOP_CAODO_MB": 1}
+NICE = (2.0, 2.5, 4.0, 5.0, 10.0, 20.0, 25.0, 50.0)
+
+
+def same_k(ks):
+    """ktmat:same-k: moi he so bang nhau (0.5%) va la he so phong to 'tron' (>1)"""
+    if not ks:
+        return None
+    k0 = median(ks)
+    if k0 > 1 and any(abs(k0 - n) <= 0.005 * n for n in NICE) \
+            and all(abs(k - k0) <= 0.005 * k0 for k in ks):
+        return k0
+    return None
 
 
 # ---------------------------------------------------------------- tien ich
@@ -77,7 +91,7 @@ def build_sequences(unit, issues):
                         sp = [seg[i + 1][1] - seg[i][1] for i in range(len(seg) - 1)]
                         med = median(sp) if sp else 0.0
                         gap = c - seg[-1][1]
-                        if (nm == seg[0][0] or nm == seg[-1][0]) and med > 0 and gap > 1.5 * med:
+                        if med > 0 and gap > 1.5 * med:
                             segs.append(seg)  # ban ve thu 2 dat canh: tach doan
                             seg = [(nm, c)]
                         else:
@@ -97,9 +111,10 @@ def build_sequences(unit, issues):
 
 
 def check_axes(units, issues):
-    votes = {}        # key -> list (label, value, consec)
+    votes = {}        # key -> list (label, value, consec, uid)
     orders = {}       # fam -> list (label, [names])
-    for u in units:
+    allp = []
+    for uid, u in enumerate(units):
         u["seqs"] = build_sequences(u, issues)
         upairs = {}
         for fam, orient, s in u["seqs"]:
@@ -121,8 +136,23 @@ def check_axes(units, issues):
                         upairs[k] = (v0, c0 or cons, rep)
                     else:
                         upairs[k] = (v, cons, False)
-        for k, (v, c, _) in upairs.items():
-            votes.setdefault(k, []).append((u["label"], v, c))
+        allp.append((uid, u, {k: (u["label"], v, c, uid) for k, (v, c, _) in upairs.items()}))
+        if SET["KHOP_TRUC_MOI_BAN_VE"] or u["flags"]:     # chi MB/MD/MC bo phieu
+            for k, (v, c, _) in upairs.items():
+                votes.setdefault(k, []).append((u["label"], v, c, uid))
+    # ban ve phong to k lan -> bo khoi bo phieu (ktmat:chk-axes)
+    for uid, u, pe in allp:
+        rs = []
+        for k, e in pe.items():
+            oth = [x for x in votes.get(k, []) if x[3] != uid]
+            if oth:
+                rs.append(e[1] / max(1e-6, min(x[1] for x in oth)))
+        kk = same_k(rs)
+        if kk:
+            u["scale"] = kk
+            for k in votes:
+                votes[k] = [x for x in votes[k] if x[3] != uid]
+            issues.append(("KHOP-PHONGTO", "GOIY", "Truc trong %s ve phong to x%.1f" % (u["label"], kk)))
     # bo phieu giua cac ban ve (ktmat:vote)
     for k in sorted(votes, key=lambda k: (natkey(k[0]), natkey(k[1]))):
         lst = votes[k]
@@ -177,7 +207,8 @@ def check_dims(units, issues):
     tolm = max(2 * TOL, 5.0)
     for u in units:
         for d in u["dims"]:
-            p13, p14, dr, val = d
+            p13, p14, dr, val = d[:4]
+            lf = d[4] if len(d) > 4 else 1.0           # DIMLFAC
             idx = 0 if dr == "H" else 1
             for fam, orient, s in u["seqs"]:
                 if orient != dr:
@@ -188,7 +219,11 @@ def check_dims(units, issues):
                     ca = a[1]
                     cb = b[1]
                     ad = abs(cb - ca)
-                    if abs(val - ad) > TOL:
+                    ex = ad * lf
+                    k = u.get("scale")
+                    ok = (abs(val - ex) <= TOL or (k and abs(val - ad / k) <= TOL)
+                          or (0 < val < 0.01 * ex and abs(val * 1000 - ex) <= TOL))
+                    if not ok:
                         ends = {s[0][0], s[-1][0]}
                         code = "KHOP-TONG" if ({a[0], b[0]} == ends and len(s) >= 3) else "KHOP-DIMTRUC"
                         issues.append((code, "LOI", "Dim truc %s-%s ghi %d, khoang cach truc = %d (%s)"
@@ -198,6 +233,8 @@ def check_dims(units, issues):
 
 # ---------------------------------------------------------------- cao do
 def check_levels(units, issues):
+    nmm = NEAR_LV
+    kinds_on = ("BLOCK", "TEXT") if SET["KHOP_CAODO_TEXT"] else ("BLOCK",)
     for u in units:
         if not ({"MD", "MC"} & u["flags"]):
             continue
@@ -205,26 +242,39 @@ def check_levels(units, issues):
         for lv in u["levels"]:
             kinds.setdefault(lv[3], []).append(lv)
         for kind, syms in kinds.items():
-            if len(syms) < 2:
+            if kind not in kinds_on or len(syms) < 2:
                 continue
-            zeros = [s for s in syms if abs(s[0]) < 1e-6]
-            if zeros:
-                datums = [(g[0][2], 0.0) for g in chain_groups(zeros, lambda s: s[2], TOL_LV)]
-            else:
-                m = min(syms, key=lambda s: s[0])
-                datums = [(m[2], m[0])]
-            for v, x, y, _ in syms:
-                best = None
-                for yd, vd in datums:
-                    err = abs(y - (yd + (v - vd) * 1000.0))
-                    if best is None or err < best[0]:
-                        best = (err, yd, vd)
-                if best[0] > TOL_LV:
-                    meas = best[2] + (y - best[1]) / 1000.0
+            # moc ngam dinh = Y - 1000 x gia tri  (ktmat:chain1)
+            cls = chain_groups([(y - 1000.0 * v, v, x, y) for v, x, y, _ in syms], lambda t: t[0], TOL_LV)
+            dcls = [c for c in cls if any(abs(t[1]) < 1e-6 for t in c)]
+            if not dcls:
+                big = max(cls, key=len)
+                if len(big) < 2:
+                    big = min(cls, key=lambda c: c[0][1])
+                dcls = [big]
+            bad = []
+            for c in cls:
+                if any(c is d for d in dcls):
+                    continue
+                vals = set(round(t[1] * 1000) for t in c)
+                off = min(abs(c[0][0] - d[0][0]) for d in dcls)
+                if not (len(vals) >= 2 and off > 1000.0):
+                    bad += c
+            ref = dcls[0][0]
+            ks = [(t[3] - ref[3]) / (1000.0 * (t[1] - ref[1])) for t in bad if abs(t[1] - ref[1]) > 1e-6]
+            if len(bad) >= 2 and len(ks) == len(bad) and same_k(ks):
+                issues.append(("KHOP-PHONGTO", "GOIY", "Cao do %s phong to" % u["label"]))
+                continue
+            for t in bad:
+                err, d = min((abs(t[0] - d[0][0]), d[0]) for d in dcls)
+                if err > TOL_LV:
+                    meas = d[1] + (t[3] - d[3]) / 1000.0
                     issues.append(("KHOP-CAODO-VITRI", "LOI",
                                    "Cao do %+.3f dat sai vi tri, do duoc %+.3f (%s)"
-                                   % (v, meas, u["label"])))
+                                   % (t[1], meas, u["label"])))
     # giua cac mat dung / mat cat
+    plan = [lv[0] for u in units if "MB" in u["flags"] and not ({"MD", "MC"} & u["flags"])
+            for lv in u["levels"]]
     sets = []
     for u in units:
         if {"MD", "MC"} & u["flags"]:
@@ -233,8 +283,8 @@ def check_levels(units, issues):
                 sets.append((u["label"], vals))
     if len(sets) >= 2:
         mx = [(lab, vals[-1]) for lab, vals in sets]
-        if max(m for _, m in mx) - min(m for _, m in mx) > TOL_V:
-            issues.append(("KHOP-CAODO", "CANHBAO", "Cao do dinh khac nhau: "
+        if SET["KHOP_CAODO_DINH"] and max(m for _, m in mx) - min(m for _, m in mx) > TOL_V:
+            issues.append(("KHOP-CAODO", "GOIY", "Cao do dinh khac nhau: "
                            + ", ".join("%s = %+.3f" % m for m in mx)))
         seen = set()
         for i in range(len(sets)):
@@ -248,14 +298,16 @@ def check_levels(units, issues):
                             continue
                         if TOL_V < abs(v1 - v2) <= NEAR_LV and (l1, l2, v1, v2) not in seen:
                             seen.add((l1, l2, v1, v2))
-                            issues.append(("KHOP-CAODO", "CANHBAO",
+                            onplan = any(abs(v - p) <= TOL_V for v in (v1, v2) for p in plan)
+                            issues.append(("KHOP-CAODO", "CANHBAO" if onplan else "GOIY",
                                            "Cao do lech: %s = %+.3f, %s = %+.3f"
                                            % (l1, v1, l2, v2)))
-    # cao do ghi tren mat bang
+    # cao do ghi tren mat bang (SETTING KHOP_CAODO_MB 0/1/2)
+    mode = SET["KHOP_CAODO_MB"]
     ref = [lv[0] for u in units if "MC" in u["flags"] for lv in u["levels"]]
     if not ref:
         ref = [lv[0] for u in units if "MD" in u["flags"] for lv in u["levels"]]
-    if ref:
+    if ref and mode > 0:
         for u in units:
             if "MB" in u["flags"] and not ({"MD", "MC"} & u["flags"]):
                 done = set()                     # moi gia tri 1 lan / ban ve
@@ -263,7 +315,9 @@ def check_levels(units, issues):
                     if round(lv[0], 3) in done:
                         continue
                     done.add(round(lv[0], 3))
-                    if not any(abs(lv[0] - r) <= TOL_V for r in ref):
+                    if any(abs(lv[0] - r) <= TOL_V for r in ref):
+                        continue
+                    if mode >= 2 or any(abs(lv[0] - r) <= nmm + 1e-9 for r in ref):
                         issues.append(("KHOP-CAODO-MB", "GOIY",
                                        "Cao do %+.3f tren mat bang %s khong co tren mat cat"
                                        % (lv[0], u["label"])))
@@ -357,6 +411,57 @@ def scenario_order():
     return run([plan("KT-01", 0, 0), plan("KT-03", 100000, 0), swapped])
 
 
+def scenario_tum_thang():
+    """mat cat qua tum thang dinh +13.500, mat dung chi toi +10.200: HOP LE"""
+    return run([plan("KT-01", 0, 0, lv=[0.0]),
+                section("KT-05", 100000, 0, lv=LEVELS + [13.5]),
+                section("KT-04", 150000, 0, flag="MD")])
+
+
+def scenario_detail_scaled():
+    """MB chi tiet WC 1/20 ve phong to x5 trong khung 1/100, dim DIMLFAC 0.2 -> chi GOIY PHONGTO"""
+    xs = [x * 5 for x in BAY_X[:3]]
+    ys = [y * 5 for y in BAY_Y[:2]]
+    det = plan("KT-10", 300000, 0, xs=xs, ys=ys)
+    det["dims"] = [(d[0], d[1], d[2], d[3] / 5.0, 0.2) for d in det["dims"]]
+    sec = section("KT-11", 400000, 0, lv=[0.0, 3.6], lvy=[0.0, 3600 * 5])   # mat cat chi tiet x5
+    return run([plan("KT-01", 0, 0), plan("KT-02", 50000, 0), det, sec,
+                section("KT-05", 100000, 0)])
+
+
+def scenario_detail_broken():
+    """chi tiet (khong phai MB/MD/MC) ve truc 2-3 co net ngat (khoang cach rut ngan) -> khong bao"""
+    det = {"label": "KT-12", "flags": set(), "levels": [], "dims": [],
+           "bubbles": [("2", 300000, 0, 800), ("3", 301500, 0, 800)]}
+    return run([plan("KT-01", 0, 0), plan("KT-02", 50000, 0), det])
+
+
+def scenario_roof_side():
+    """mat bang tang + mat bang mai (chi truc 2..4) dat canh nhau trong 1 khung -> khong bao"""
+    u = plan("KT-03", 0, 0)
+    roof = plan("X", 30000, 0, xs=BAY_X[1:4])
+    # doi ten truc so cua mai thanh 2,3,4
+    ren = {"1": "2", "2": "3", "3": "4"}
+    roof["bubbles"] = [(ren.get(n, n) if n.isdigit() else n, x, y, sz) for n, x, y, sz in roof["bubbles"]]
+    u["bubbles"] += roof["bubbles"]
+    return run([u, plan("KT-01", 0, 0)])
+
+
+def scenario_level_copy():
+    """copy ky hieu +7.200 xuong san +3.600 quen sua so (1 ben) -> 1 LOI; mat dung xep chong
+    khong ghi +-0.000, TEXT cao do lech vach tuy y -> khong bao; dim ghi de theo m -> khong bao"""
+    sec = section("KT-05", 100000, 0)
+    sec["levels"][2] = (7.2, sec["levels"][2][1], sec["levels"][2][2], "BLOCK")   # trai, Y=3600
+    sec["levels"] += [(0.0, 99000, 37, "TEXT"), (3.6, 99000, 3600 + 180, "TEXT"),
+                      (7.2, 99000, 7200 + 95, "TEXT")]
+    el = section("KT-04", 150000, 0, flag="MD")
+    el2 = section("KT-04", 150000, 30000, lv=[0.45, 3.6, 7.2], flag="MD")      # xep chong, khong co 0
+    el["levels"] += el2["levels"]
+    el["bubbles"] += el2["bubbles"]
+    p1 = plan("KT-01", 0, 0, dims=[((3600, 0), (7200, 0), "H", 3.6)])           # ghi "3.6" (m)
+    return run([p1, sec, el])
+
+
 def main():
     ok = True
 
@@ -378,12 +483,22 @@ def main():
             "KHOP-DIMTRUC",                           # dim 2-3 ghi 3500 tren KT-02
             "KHOP-TONG",                              # dim tong 1-5 ghi 14500 tren KT-01
             "KHOP-CAODO-VITRI", "KHOP-CAODO-VITRI",   # +3.600 (2 ben) tren KT-05
-            "KHOP-CAODO", "KHOP-CAODO",               # dinh 10.2 vs 10.5 + 7.200/7.150
+            "KHOP-CAODO",                             # 7.200/7.150 (dinh 10.2/10.5: tat mac dinh)
             "KHOP-CAODO-MB"])                          # +3.550 tren mat bang
     expect("3. 2 mat bang canh nhau (khong bao) + trung ten truc that",
            scenario_side_by_side(), ["KHOP-TRUNGTRUC"])
     expect("4. Thu tu truc B/C bi doi", scenario_order(),
            ["KHOP-THUTU", "KHOP-TRUC", "KHOP-TRUC"])   # A-C, B-D (cap lien tiep tren KT-02)
+    expect("5. Mat cat qua tum thang dinh cao hon mat dung (hop le)", scenario_tum_thang(), [])
+    SET["KHOP_CAODO_DINH"] = 1
+    expect("5b. ... bat SETTING KHOP_CAODO_DINH=1 -> GOIY", scenario_tum_thang(), ["KHOP-CAODO"])
+    SET["KHOP_CAODO_DINH"] = 0
+    expect("6. Chi tiet phong to x5 (DIMLFAC 0.2) -> chi GOIY", scenario_detail_scaled(),
+           ["KHOP-PHONGTO", "KHOP-PHONGTO"])
+    expect("7. Chi tiet truc ngat net (khong phai MB/MD/MC)", scenario_detail_broken(), [])
+    expect("8. Mat bang mai (truc 2..4) dat canh mat bang tang", scenario_roof_side(), [])
+    expect("9. Copy cao do quen sua so / mat dung xep chong / TEXT / dim ghi m",
+           scenario_level_copy(), ["KHOP-CAODO-VITRI"])
     print("\nKET QUA:", "DAT" if ok else "KHONG DAT")
     return 0 if ok else 1
 

@@ -43,10 +43,14 @@ tools/lisplint.py    kiểm tra tĩnh (bắt buộc sạch ERROR trước khi gi
 | `(kt:effname en)` `(kt:attribs en)` `(kt:attval en tag)` | block |
 | `(kt:split s "|")` `(kt:join lst ",")` `(kt:trim s)` `(kt:num s)` `(kt:str x)` `(kt:wcmatch-any s pats)` | chuỗi |
 | `(kt:parse-scale "1/100")` → 100.0 | |
-| `(kt:frames)` | list khung tên: `(ename space minpt maxpt scale sohieu ten scale-ghi-trong-khung)` |
+| `(kt:frames)` | list khung tên: `(ename space minpt maxpt scale-thuc sohieu ten scale-ghi-trong-khung)` |
 | `(kt:frame-at p space)` | khung chứa điểm |
 | `(kt:viewports)` | `(ename layout scale model-min model-max)` |
 | `(kt:scale-at p space)` | tỷ lệ tại điểm (100.0 cho 1/100), layout → 1.0, nil nếu không rõ |
+| `(kt:scales-at p space)` | moi ty le ung vien tai diem (khung + cac viewport nhin thay) |
+| `(kt:unaccent s)` `(kt:ascii s)` `(kt:norm s)` `(kt:plain s nl)` `(kt:wcesc s)` | bo dau (CP1252/CP1258/\U+), chuan hoa, bo ma MTEXT, escape wildcard cho ssget |
+| `(kt:msort lst f)` `(kt:uniq lst)` | sap xep on dinh (thay vl-sort), loai trung |
+| `(kt:box-dxf en)` `(kt:effname-dxf en)` | du phong khong ActiveX (VinaCAD) |
 | `(kt:begin mod)` `(kt:add mod code sev msg ens pt r)` `(kt:finish mod)` | ghi lỗi. sev = "LOI" / "CANHBAO" / "GOIY". `ens` = ename hoặc list; pt/r có thể nil |
 
 Lệnh chung trong lõi: KTN, KTP (xem lỗi kế/trước), KTX (xóa đánh dấu), KTBC (xuất CSV), KTCFG (nạp lại chuẩn).

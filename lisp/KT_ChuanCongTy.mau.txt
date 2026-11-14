@@ -12,10 +12,11 @@
 ;;;   LAYOUT|ten layout
 ;;;   DANHMUC|so hieu|ten ban ve
 ;;;   SETTING|KHOA|gia tri
+;;; Luu file dang ANSI hoac UTF-8 KHONG dau (ten layer co dau tieng Viet co the khong khop tren CAD ANSI).
 ;;; ============================================================
 
 ; ---------- SETTING ----------
-; CAO_CHU_GIAY: chieu cao chu IN TREN GIAY cho phep (mm) = chieu cao that / ty le.
+; CAO_CHU_GIAY: chieu cao chu IN TREN GIAY cho phep (mm) = chieu cao that / ty le (dung sai 3%).
 SETTING|CAO_CHU_GIAY|1.8,2.0,2.5,3.0,3.5,5.0
 ; TY_LE_CHO_PHEP: mau so ty le duoc phep (100 = 1/100).
 SETTING|TY_LE_CHO_PHEP|1,2,5,10,20,25,50,75,100,150,200,250,500
@@ -27,7 +28,9 @@ SETTING|MAX_LOI_MOI_MA|300
 SETTING|DUNG_SAI_KICH_THUOC|1
 ; LAYER_BO_QUA: layer khong kiem tra (wildcard, cach nhau dau phay).
 ;   *|* = moi layer xref (KT_Core noi lai phan sau dau | cua gia tri SETTING).
-SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,*|*
+SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,CHECK_DIM_OVERLAP,*|*
+; MAU_BYOBJ_BO_QUA: loai doi tuong duoc gan mau rieng, khong bao MAU-BYOBJ (vd HATCH,DIM,TEXT).
+;SETTING|MAU_BYOBJ_BO_QUA|HATCH
 ; FONT_CHO_PHEP: file font duoc phep dung trong textstyle.
 SETTING|FONT_CHO_PHEP|arial.ttf,romans.shx,vntime.shx,hztxt.shx
 

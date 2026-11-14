@@ -12,9 +12,17 @@
 ;;;   KHOP-DIMTRUC     (LOI)     dim noi 2 truc ghi khac khoang cach truc
 ;;;   KHOP-TONG        (LOI)     dim tong (truc dau -> truc cuoi) ghi khac tong khoang cach
 ;;;   KHOP-CAODO-VITRI (LOI)     ky hieu cao do dat sai vi tri Y tren mat dung/mat cat
-;;;   KHOP-CAODO       (CANHBAO) bo cao do giua cac mat dung/mat cat khong khop
-;;;   KHOP-CAODO-MB    (GOIY)    cao do ghi tren mat bang khong co tren mat cat
+;;;   KHOP-CAODO       (CANHBAO) 2 mat dung/mat cat co cap cao do lech nhau <= CAODO_LECH_NGHI
+;;;                              ma ban kia khong co, va 1 gia tri co tren mat bang (cao do san)
+;;;                    (GOIY)    nhu tren nhung khong gia tri nao co tren mat bang; cao do dinh
+;;;                              khac nhau (chi khi SETTING KHOP_CAODO_DINH=1 - thuong hop le)
+;;;   KHOP-CAODO-MB    (GOIY)    cao do tren mat bang gan (khong bang) 1 cao do mat cat
+;;;                              (KHOP_CAODO_MB: 0 tat, 1 mac dinh, 2 moi gia tri khong co)
+;;;   KHOP-PHONGTO     (GOIY)    ban ve co truc/cao do ve phong to k lan (chi tiet x5): bo qua so
 ;;;   KHOP-KHUNG       (GOIY)    khong co khung ten/viewport nao de phan vung ban ve
+;;;
+;;; SETTING tuy chon: KHOP_TRUC_MOI_BAN_VE (0: chi MB/MD/MC bo phieu truc), KHOP_CAODO_TEXT
+;;;   (0: chi kiem vi tri block cao do), KHOP_CAODO_DINH (0), KHOP_CAODO_MB (1).
 ;;;
 ;;; GIA DINH VE CACH VE (leader can pho bien cho nhan vien - xem docs/MATCH_NOTES.md):
 ;;;  1. Hinh ve trong Model ve 1:1, don vi mm: khoang cach model = kich thuoc that.
@@ -58,24 +66,7 @@
     r)
 )
 
-(defun ktmat:merge (a b f / res)
-  (while (and a b)
-    (if (apply f (list (car b) (car a)))
-      (setq res (cons (car b) res) b (cdr b))
-      (setq res (cons (car a) res) a (cdr a))))
-  (append (reverse res) a b)
-)
-
-(defun ktmat:msort (lst f / a n i)
-  ;; merge sort on dinh (khong xoa phan tu trung nhu vl-sort)
-  (if (or (null lst) (null (cdr lst)))
-    lst
-    (progn
-      (setq n (/ (length lst) 2) i 0)
-      (while (< i n)
-        (setq a (cons (car lst) a) lst (cdr lst) i (1+ i)))
-      (ktmat:merge (ktmat:msort (reverse a) f) (ktmat:msort lst f) f)))
-)
+(defun ktmat:msort (lst f) (kt:msort lst f))   ; merge sort on dinh (loi)
 
 (defun ktmat:median (lst / s n)
   (setq s (ktmat:msort lst '<) n (length s))
@@ -91,10 +82,7 @@
   (reverse res)
 )
 
-(defun ktmat:uniq (lst / res)
-  (foreach x lst (if (not (member x res)) (setq res (cons x res))))
-  (reverse res)
-)
+(defun ktmat:uniq (lst) (kt:uniq lst))
 
 (defun ktmat:round (x)
   (if (< x 0) (- (fix (+ (- x) 0.5))) (fix (+ x 0.5)))
@@ -137,84 +125,40 @@
   (if (wcmatch (substr name 1 1) "#") "SO" "CHU")
 )
 
-;;; ---------- chuoi: bo ma MTEXT, bo dau tieng Viet ----------
-(defun ktmat:plain (s / i n c d j res)
-  ;; bo ma dinh dang MTEXT (\P \f..; { } ...), giu nguyen \U+XXXX
-  (setq i 1 n (strlen s) res "")
-  (while (<= i n)
-    (setq c (substr s i 1))
-    (cond
-      ((and (= c "\\") (< i n))
-       (setq d (substr s (1+ i) 1))
-       (cond
-         ((member d '("P" "N" "~")) (setq res (strcat res " ") i (+ i 2)))
-         ((member (strcase d) '("F" "H" "C" "T" "Q" "W" "A" "S" "P"))
-          (setq j (vl-string-search ";" s i))
-          (setq i (if j (+ j 2) (1+ n))))
-         ((member (strcase d) '("U" "M")) (setq res (strcat res c) i (1+ i)))
-         ((member (strcase d) '("L" "O" "K")) (setq i (+ i 2)))
-         (T (setq res (strcat res d) i (+ i 2)))))
-      ((member c '("{" "}")) (setq i (1+ i)))
-      (T (setq res (strcat res c) i (1+ i)))))
-  res
+;;; ---------- chuoi: dung ham loi (kt:plain kt:norm kt:txt), them TCVN3 ----------
+(defun ktmat:plain (s) (kt:plain s nil))
+(defun ktmat:txt (ed) (kt:txt ed))
+
+(defun ktmat:tc (c)
+  ;; byte TCVN3 (ABC, font .VnTime/.VnTimeH) -> chu goc HOA; nil neu khong phai chu
+  (cond ((or (member c '(161 162 168 169)) (and (>= c 181) (<= c 185))
+             (and (>= c 187) (<= c 190)) (and (>= c 198) (<= c 203))) "A")
+        ((member c '(167 174)) "D")
+        ((or (member c '(163 170)) (and (>= c 204) (<= c 214))) "E")
+        ((and (>= c 215) (<= c 222)) "I")
+        ((or (member c '(164 165 171 172)) (and (>= c 223) (<= c 238))) "O")
+        ((or (member c '(166 173)) (and (>= c 239) (<= c 249))) "U")
+        ((and (>= c 250) (<= c 254)) "Y"))
 )
 
-(defun ktmat:hex (s / i v d)
-  (setq s (strcase s) i 1 v 0)
-  (while (and v (<= i (strlen s)))
-    (if (setq d (vl-string-search (substr s i 1) "0123456789ABCDEF"))
-      (setq v (+ (* v 16) d))
-      (setq v nil))
-    (setq i (1+ i)))
-  v
+(defun ktmat:tcvn3 (s / l)
+  ;; chuoi go TCVN3 -> ASCII HOA; nil neu chuoi khong co byte dac trung TCVN3
+  ;; (byte 161-254 khong phai chu Viet Latin-1/CP1258, tru ky hieu do, +-, mu 2, mu 3, x, phi)
+  (setq l (vl-string->list (kt:str s)))
+  (if (vl-some '(lambda (c) (and (>= c 161) (<= c 254)
+                                 (not (member c '(176 177 178 179 215 216 222
+                                                  192 193 194 195 200 201 202 204 205 208 210 211 212
+                                                  213 217 218 221 224 225 226 227 232 233 234 236 237
+                                                  240 242 243 244 245 249 250 253)))))
+               l)
+    (apply 'strcat (mapcar '(lambda (c) (cond ((< c 128) (strcase (chr c))) ((ktmat:tc c)) (T ""))) l)))
 )
 
-(defun ktmat:uchar (c)
-  ;; ma Unicode chu Viet co dau -> chu khong dau (HOA); khac -> ""
-  (cond ((and (>= c 7840) (<= c 7863)) "A")
-        ((and (>= c 7864) (<= c 7879)) "E")
-        ((and (>= c 7880) (<= c 7883)) "I")
-        ((and (>= c 7884) (<= c 7907)) "O")
-        ((and (>= c 7908) (<= c 7921)) "U")
-        ((and (>= c 7922) (<= c 7929)) "Y")
-        ((member c '(192 193 194 195 196 197 224 225 226 227 228 229 258 259)) "A")
-        ((member c '(200 201 202 203 232 233 234 235)) "E")
-        ((member c '(204 205 206 207 236 237 238 239 296 297)) "I")
-        ((member c '(210 211 212 213 214 242 243 244 245 246 416 417)) "O")
-        ((member c '(217 218 219 220 249 250 251 252 360 361 431 432)) "U")
-        ((member c '(221 253)) "Y")
-        ((member c '(208 240 272 273)) "D")
-        (T ""))
-)
-
-(defun ktmat:unaccent (s / p h res)
-  ;; "M\U+1EB6T C\U+1EAET" -> "MAT CAT" (viet HOA)
-  (setq s (strcase s) res "")
-  (while (setq p (vl-string-search "\\U+" s))
-    (setq h   (ktmat:hex (substr s (+ p 4) 4))
-          res (strcat res (substr s 1 p) (if h (ktmat:uchar h) ""))
-          s   (substr s (+ p 8))))
-  (setq res (strcat res s))
-  (apply 'strcat
-         (mapcar '(lambda (c) (if (> c 127) (ktmat:uchar c) (chr c)))
-                 (vl-string->list res)))
-)
-
-(defun ktmat:norm (s)
-  ;; chuan hoa de so sanh: bo dinh dang, bo dau, HOA, chi giu A-Z 0-9
-  (if (= (type s) 'STR)
-    (vl-list->string
-      (vl-remove-if-not
-        '(lambda (c) (or (and (>= c 48) (<= c 57)) (and (>= c 65) (<= c 90))))
-        (vl-string->list (ktmat:unaccent (ktmat:plain s)))))
-    "")
-)
-
-(defun ktmat:txt (ed / s)
-  ;; noi dung TEXT/MTEXT (MTEXT dai: cac nhom 3 + nhom 1)
-  (setq s "")
-  (foreach x ed (if (= (car x) 3) (setq s (strcat s (cdr x)))))
-  (strcat s (cond ((kt:dxf 1 ed)) ("")))
+(defun ktmat:norm (s / t3)
+  ;; chuan hoa so sanh (loi kt:norm: Unicode/\U+/CP1258) + font TCVN3
+  (if (and (= (type s) 'STR) (setq t3 (ktmat:tcvn3 (kt:plain s nil))))
+    (kt:norm t3)
+    (kt:norm s))
 )
 
 ;;; ---------- doc gia tri cao do ----------
@@ -276,6 +220,25 @@
     (strcat "khung " (kt:str (car f))))
 )
 
+(defun ktmat:stripdig (s / i)
+  ;; "TENBANVE2" -> "TENBANVE" (bo so / _ / cach cuoi)
+  (setq s (kt:str s) i (strlen s))
+  (while (and (> i 0) (wcmatch (substr s i 1) "#,_, ")) (setq i (1- i)))
+  (substr s 1 i)
+)
+
+(defun ktmat:ftitle (f / row tg base res)
+  ;; ten ban ve day du: tag ten + cac tag cung goc (TENBANVE1 + TENBANVE2: "MAT BANG" / "TANG 1")
+  (setq row (kt:cfg-row "KHUNG" (kt:effname (car f)))
+        tg  (if row (strcase (kt:str (nth 2 row))) ""))
+  (if (/= tg "")
+    (progn
+      (setq base (ktmat:stripdig tg))
+      (foreach a (kt:attribs (car f))
+        (if (and (= (ktmat:stripdig (car a)) base) (/= (cdr a) "")) (setq res (cons (cdr a) res))))))
+  (if res (kt:join (reverse res) " ") (kt:str (nth 6 f)))
+)
+
 (defun ktmat:flags (title / n res)
   (setq n (ktmat:norm title))
   (if (vl-string-search "MATBANG" n) (setq res (cons "MB" res)))
@@ -291,12 +254,13 @@
   (or (member "MD" (nth 3 u)) (member "MC" (nth 3 u)))
 )
 
-(defun ktmat:units (/ res i c ed lf)
+(defun ktmat:units (/ res i c ed lf ti)
   (setq i 0)
   (foreach f (kt:frames)
     (if (= (nth 1 f) "Model")
-      (setq res (cons (list (setq i (1+ i)) (ktmat:flabel f) (kt:str (nth 6 f))
-                            (ktmat:flags (nth 6 f)) (nth 2 f) (nth 3 f) (car f))
+      (setq ti  (ktmat:ftitle f)
+            res (cons (list (setq i (1+ i)) (ktmat:flabel f) ti
+                            (ktmat:flags ti) (nth 2 f) (nth 3 f) (car f))
                       res))))
   (foreach vp (kt:viewports)
     (if (and (nth 3 vp) (nth 4 vp))
@@ -308,10 +272,11 @@
           (progn
             (setq ed (entget (car vp))
                   lf (if (kt:dxf 10 ed) (kt:frame-at (kt:2d (kt:dxf 10 ed)) (nth 1 vp))))
-            (setq res (cons (list (setq i (1+ i))
+            (setq ti  (if lf (ktmat:ftitle lf) (nth 1 vp))
+                  res (cons (list (setq i (1+ i))
                                   (if lf (ktmat:flabel lf) (nth 1 vp))
-                                  (if lf (kt:str (nth 6 lf)) (nth 1 vp))
-                                  (ktmat:flags (if lf (kt:str (nth 6 lf)) (nth 1 vp)))
+                                  ti
+                                  (ktmat:flags ti)
                                   (nth 3 vp) (nth 4 vp) (car vp))
                             res)))))))
   (reverse res)
@@ -379,34 +344,39 @@
   (setq x (vl-catch-all-apply 'entget (list en '("ACAD"))))
   (if (not (vl-catch-all-error-p x))
     (setq l (cdr (assoc "ACAD" (cdr (assoc -3 x))))))
-  (while (and l (null r))
-    (if (and (= (car (car l)) 1070) (= (cdr (car l)) 144) (cadr l) (numberp (cdr (cadr l))))
+  ;; XData DSTYLE: (1000 . "DSTYLE") (1002 . "{") cap (1070 . ma) (gia tri) ... (1002 . "}")
+  (while (and l (/= (car (car l)) 1002)) (setq l (cdr l)))
+  (setq l (cdr l))
+  (while (and l (cdr l) (null r) (/= (car (car l)) 1002))
+    (if (and (= (car (car l)) 1070) (= (cdr (car l)) 144) (numberp (cdr (cadr l))))
       (setq r (cdr (cadr l))))
-    (setq l (cdr l)))
+    (setq l (cddr l)))
   (if (null r)
     (if (setq st (tblsearch "DIMSTYLE" (cond ((kt:dxf 3 ed)) ("STANDARD"))))
       (setq r (kt:dxf 144 st))))
   (if (and (numberp r) (> r 0)) (float r) 1.0)
 )
 
-(defun ktmat:dimval (en ed / ov n)
+(defun ktmat:dimval (ed lf / ov n)
   ;; gia tri hien thi: so ghi de (neu la so) hoac do x DIMLFAC
   (setq ov (kt:trim (ktmat:plain (cond ((kt:dxf 1 ed)) ("")))))
   (if (and (/= ov "") (not (vl-string-search "<>" ov)) (setq n (kt:num ov)))
     n
-    (* (cond ((kt:dxf 42 ed)) (0.0)) (ktmat:dimlfac en ed)))
+    (* (cond ((kt:dxf 42 ed)) (0.0)) lf))
 )
 
-(defun ktmat:collect (/ trc cdo fnames r ed p u nm atts v bubs levs dims typ p1 p2 dr)
+(defun ktmat:collect (/ trc cdo oth fnames r ed p u nm atts v bubs levs dims typ p1 p2 dr lf)
   ;; tra ve (bubbles levels dims)
   ;;  bubble: (uidx ten x y kichthuoc ename)
   ;;  level : (uidx giatri_m x y loai("B"/"T") ename)
-  ;;  dim   : (uidx x13 y13 x14 y14 "H"/"V" giatri ename)
+  ;;  dim   : (uidx x13 y13 x14 y14 "H"/"V" giatri ename dimlfac)
   (foreach row (kt:cfg "BLOCK")
     (cond ((= (strcase (kt:str (cadr row))) "TRUC")
            (setq trc (cons (cons (strcase (kt:str (car row))) (kt:str (caddr row))) trc)))
           ((= (strcase (kt:str (cadr row))) "CAODO")
-           (setq cdo (cons (cons (strcase (kt:str (car row))) (kt:str (caddr row))) cdo)))))
+           (setq cdo (cons (cons (strcase (kt:str (car row))) (kt:str (caddr row))) cdo)))
+          ;; block vai tro khac (MATCAT, CHITIET, CUA...) khong bao gio la ky hieu truc
+          (T (setq oth (cons (strcase (kt:str (car row))) oth)))))
   (setq fnames (kt:cfg-names "KHUNG"))
   ;; block: truc / cao do (bo qua chinh khung ten)
   (foreach en (kt:ss-all '((0 . "INSERT")))
@@ -417,6 +387,7 @@
         (setq nm (ktmat:bname en ed) atts (kt:attribs en) p (kt:2d p) v nil)
         (cond
           ((member nm fnames) nil)
+          ((member nm oth) nil)
           ((setq r (assoc nm trc))
            (if (setq v (ktmat:axname (ktmat:pickatt atts (cdr r)) nil))
              (setq bubs (cons (list (car u) v (car p) (cadr p) (kt:boxsize en) en) bubs))))
@@ -447,11 +418,11 @@
              (kt:dxf 13 ed) (kt:dxf 14 ed)
              (setq u (ktmat:unit-at (kt:2d (kt:dxf 13 ed)))))
       (progn
-        (setq p1 (kt:2d (kt:dxf 13 ed)) p2 (kt:2d (kt:dxf 14 ed))
+        (setq p1 (kt:2d (kt:dxf 13 ed)) p2 (kt:2d (kt:dxf 14 ed)) lf (ktmat:dimlfac en ed)
               dr (ktmat:hv (if (= typ 0) (cond ((kt:dxf 50 ed)) (0.0)) (angle p1 p2))))
         (if dr
           (setq dims (cons (list (car u) (car p1) (cadr p1) (car p2) (cadr p2) dr
-                                 (ktmat:dimval en ed) en)
+                                 (ktmat:dimval ed lf) en lf)
                            dims))))))
   (list (reverse bubs) (reverse levs) (reverse dims))
 )
@@ -499,8 +470,9 @@
                           (setq sp  (ktmat:diffs (mapcar 'cadr seg))
                                 med (if sp (ktmat:median sp) 0.0)
                                 gap (- c (cadr (last seg))))
-                          (if (and (or (= nm (car (car seg))) (= nm (car (last seg))))
-                                   (> med 0) (> gap (* 1.5 med)))
+                          ;; ten lap nam sau doan hien tai mot khoang ho > 1.5 nhip trung vi
+                          ;; -> ban ve thu 2 (vd mai chi co truc 2..4) dat canh trong cung khung
+                          (if (and (> med 0) (> gap (* 1.5 med)))
                             ;; ban ve thu 2 dat canh trong cung khung: tach doan
                             (setq segs (cons seg segs) seg (list (list nm c (nth 4 b))))
                             (if (not (member nm dups))
@@ -518,7 +490,24 @@
   (ktmat:msort (reverse res) '(lambda (a b) (> (length (caddr a)) (length (caddr b)))))
 )
 
-(defun ktmat:chk-axes (units bubs tol / allseqs votes orders ub seqs upairs it n i j a b k v cs old rep e lst srt cls cur c0 ref labs ordr refo com mine)
+;;; he so phong to "tron": hinh chi tiet ve phong to trong khung (vd 1/20 ve x5 trong khung 1/100)
+(defun ktmat:nice (k)
+  (and (numberp k) (> k 1.0)
+       (vl-some '(lambda (n) (<= (abs (- k n)) (* 0.005 n))) '(2.0 2.5 4.0 5.0 10.0 20.0 25.0 50.0)))
+)
+
+(defun ktmat:same-k (ks / k0)
+  ;; moi he so trong ks bang nhau (0.5%) va "tron" -> he so; nil neu khong
+  (if (and ks (setq k0 (ktmat:median ks)) (ktmat:nice k0)
+           (vl-every '(lambda (k) (<= (abs (- k k0)) (* 0.005 k0))) ks))
+    k0)
+)
+
+(defun ktmat:chk-axes (units bubs tol / allseqs votes orders ub seqs upairs it n i j a b k v cs old rep e lst srt cls cur c0 ref labs ordr refo com mine allu allp rs oth scaled kk)
+  ;; tra ve (list day-truc he-so-phong-to): day truc (uidx ho huong items), he so ((uidx . k) ...)
+  ;; chi ban ve MAT BANG / MAT DUNG / MAT CAT tham gia bo phieu giua cac ban ve
+  ;; (chi tiet ve cat/ngat truc -> bao nham); SETTING KHOP_TRUC_MOI_BAN_VE=1 de xet ca ban ve khac
+  (setq allu (= 1 (fix (kt:cfg-num "KHOP_TRUC_MOI_BAN_VE" 0))))
   ;; tra ve tat ca day truc: (uidx ho huong items)
   (foreach u units
     (setq ub (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= (car x) (car u))) bubs)))
@@ -556,12 +545,31 @@
                 (setq upairs (cons (list k v cs nil (list (caddr a) (caddr b))) upairs)))
               (setq j (1+ j)))
             (setq i (1+ i))))
-        ;; phieu cua ban ve nay
-        (foreach p (reverse upairs)
-          (setq e (list (cadr u) (cadr p) (caddr p) (nth 4 p)))
-          (if (setq old (assoc (car p) votes))
-            (setq votes (subst (append old (list e)) old votes))
-            (setq votes (cons (list (car p) e) votes)))))))
+        ;; phieu cua ban ve nay: (nhan giatri lientiep ens uidx)
+        (setq allp (cons (cons u (mapcar '(lambda (p) (list (car p) (list (cadr u) (cadr p) (caddr p) (nth 4 p) (car u))))
+                                         (reverse upairs)))
+                         allp))
+        (if (or allu (nth 3 u))
+          (foreach p (reverse upairs)
+            (setq e (list (cadr u) (cadr p) (caddr p) (nth 4 p) (car u)))
+            (if (setq old (assoc (car p) votes))
+              (setq votes (subst (append old (list e)) old votes))
+              (setq votes (cons (list (car p) e) votes))))))))
+  ;; ban ve ve phong to k lan (moi cap truc = k x gia tri nho nhat cua ban ve khac): bo khoi bo phieu
+  (foreach up (reverse allp)
+    (setq rs nil)
+    (foreach pe (cdr up)
+      (if (setq oth (vl-remove-if '(lambda (x) (= (nth 4 x) (car (car up)))) (cdr (assoc (car pe) votes))))
+        (setq rs (cons (/ (cadr (cadr pe)) (max 1e-6 (apply 'min (mapcar 'cadr oth)))) rs))))
+    (if (setq kk (ktmat:same-k rs))
+      (progn
+        (setq scaled (cons (cons (car (car up)) kk) scaled)
+              votes  (mapcar '(lambda (kv) (cons (car kv) (vl-remove-if '(lambda (x) (= (nth 4 x) (car (car up)))) (cdr kv))))
+                             votes))
+        (kt:add "KHOP" "KHOP-PHONGTO" "GOIY"
+                (strcat "Truc trong " (cadr (car up)) " ve phong to x" (rtos kk 2 1)
+                        " so voi ban ve khac (chi tiet phong to?): khong so khoang cach truc")
+                (nth 6 (car up)) nil nil))))
   ;; bo phieu giua cac ban ve
   (foreach kv (reverse votes)
     (setq lst (cdr kv))
@@ -616,7 +624,7 @@
                               (kt:join com ",") " ; " (cadr (assoc (cadr o) units)) ": "
                               (kt:join mine ","))
                       (nth 6 (assoc (cadr o) units)) nil nil)))))))
-  (reverse allseqs)
+  (list (reverse allseqs) scaled)
 )
 
 ;;; ---------- dim noi truc ----------
@@ -629,7 +637,15 @@
   best
 )
 
-(defun ktmat:chk-dims (units seqs dims tol / tolm done c1 c2 a b ad its code lab)
+(defun ktmat:dim-ok (val ad lf k tol / ex)
+  ;; gia tri dim hien thi val co hop voi khoang cach truc ad (do trong model)?
+  (setq ex (* ad lf))
+  (or (<= (abs (- val ex)) tol)
+      (and k (<= (abs (- val (/ ad k))) tol))                         ; chi tiet phong to, ghi de so that
+      (and (> val 0) (< val (* 0.01 ex)) (<= (abs (- (* 1000.0 val) ex)) tol)))  ; ghi theo m
+)
+
+(defun ktmat:chk-dims (units seqs dims tol scaled / tolm done c1 c2 a b ad its code lab lf k)
   (setq tolm (max (* 2.0 tol) 5.0))
   (foreach d dims
     (setq done nil)
@@ -643,8 +659,10 @@
                 b   (ktmat:near its c2 tolm))
           (if (and a b (/= (car a) (car b)))
             (progn
-              (setq done T ad (abs (- (cadr b) (cadr a))))
-              (if (> (abs (- (nth 6 d) ad)) tol)
+              (setq done T ad (abs (- (cadr b) (cadr a)))
+                    lf (cond ((numberp (nth 8 d)) (nth 8 d)) (1.0))
+                    k  (cdr (assoc (car d) scaled)))
+              (if (not (ktmat:dim-ok (nth 6 d) ad lf k tol))
                 (progn
                   (setq lab  (cadr (assoc (car d) units))
                         code (if (and (cddr its)
@@ -654,46 +672,85 @@
                   (kt:add "KHOP" code "LOI"
                           (strcat (if (= code "KHOP-TONG") "Kich thuoc tong truc " "Kich thuoc truc ")
                                   (ktmat:pname (ktmat:pkey (car a) (car b))) " ghi "
-                                  (ktmat:mm (nth 6 d)) " nhung khoang cach truc = " (ktmat:mm ad)
+                                  (ktmat:mm (nth 6 d)) " nhung khoang cach truc = " (ktmat:mm (* ad lf))
                                   " (" lab ")")
                           (nth 7 d) nil nil)))))))))
 )
 
 ;;; ---------- cao do ----------
-(defun ktmat:chk-lvpos (units levs tollv / ul syms zeros datums m best err meas)
-  ;; tren mat dung/mat cat: (Y_i - Y_moc)/1000 = V_i - V_moc
+;;; Cao do tren mat dung/mat cat: ky hieu dung vi tri thi Y - 1000 x gia tri = Y moc (+-0.000).
+;;; Gom ky hieu theo "moc ngam dinh" do: moi hinh ve 1 cum. Cum chua ky hieu 0 la moc;
+;;; ky hieu ngoai cum moc = sai vi tri (vd copy ky hieu +7.200 xuong san +3.600 quen sua so),
+;;; tru cum co >= 2 gia tri lech moc > 1m (hinh ve khac xep chong khong ghi +-0.000).
+(defun ktmat:chain1 (lst tol / res cur prev k)
+  ;; gom theo (car x), tach nhom khi buoc nhay > tol
+  (foreach b (ktmat:msort lst '(lambda (a b) (< (car a) (car b))))
+    (setq k (car b))
+    (if (and cur (> (- k prev) tol))
+      (setq res (cons (reverse cur) res) cur nil))
+    (setq cur (cons b cur) prev k))
+  (if cur (setq res (cons (reverse cur) res)))
+  (reverse res)
+)
+
+(defun ktmat:chk-lvpos (units levs tollv / kinds ul syms cls dcls big bad vals off ref ks k best err meas)
+  ;; TEXT cao do: khoang cach chu - vach khong co dinh -> mac dinh chi xet block
+  ;; (SETTING KHOP_CAODO_TEXT=1 de xet ca TEXT/MTEXT)
+  (setq kinds (if (= 1 (fix (kt:cfg-num "KHOP_CAODO_TEXT" 0))) '("B" "T") '("B")))
   (foreach u units
     (if (ktmat:isel u)
       (progn
         (setq ul (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= (car x) (car u))) levs)))
         ;; ul: (giatri x y loai ename)
-        (foreach kind '("B" "T")
+        (foreach kind kinds
           (setq syms (vl-remove-if-not '(lambda (x) (= (nth 3 x) kind)) ul))
           (if (cdr syms)
             (progn
-              (setq zeros (vl-remove-if-not '(lambda (x) (< (abs (car x)) 1e-6)) syms)
-                    datums nil)
-              (if zeros
-                (foreach g (ktmat:chain zeros "V" tollv)
-                  (setq datums (cons (list (caddr (car g)) 0.0) datums)))
+              ;; phan tu cum: (moc giatri x y loai ename)
+              (setq cls  (ktmat:chain1 (mapcar '(lambda (x) (cons (- (caddr x) (* 1000.0 (car x))) x)) syms)
+                                       tollv)
+                    dcls (vl-remove-if-not
+                           '(lambda (c) (vl-some '(lambda (x) (< (abs (cadr x)) 1e-6)) c)) cls))
+              (if (null dcls)
                 (progn
-                  (setq m nil)
-                  (foreach x syms (if (or (null m) (< (car x) (car m))) (setq m x)))
-                  (setq datums (list (list (caddr m) (car m))))))
-              (setq datums (reverse datums))
-              (foreach x syms
-                (setq best nil)
-                (foreach dt datums
-                  (setq err (abs (- (caddr x) (+ (car dt) (* 1000.0 (- (car x) (cadr dt)))))))
-                  (if (or (null best) (< err (car best))) (setq best (list err (car dt) (cadr dt)))))
-                (if (> (car best) tollv)
+                  (setq big nil)
+                  (foreach c cls (if (or (null big) (> (length c) (length big))) (setq big c)))
+                  (if (null (cdr big))
+                    ;; khong cum nao >= 2: moc = ky hieu gia tri nho nhat
+                    (foreach c cls (if (< (cadr (car c)) (cadr (car big))) (setq big c))))
+                  (setq dcls (list big))))
+              (setq bad nil)
+              (foreach c cls
+                (if (not (member c dcls))
                   (progn
-                    (setq meas (+ (caddr best) (/ (- (caddr x) (cadr best)) 1000.0)))
-                    (kt:add "KHOP" "KHOP-CAODO-VITRI" "LOI"
-                            (strcat "Cao do " (ktmat:lvstr (car x)) " dat sai vi tri, do duoc "
-                                    (ktmat:lvstr meas) " theo moc " (ktmat:lvstr (caddr best))
-                                    " (lech " (ktmat:mm (car best)) "mm) - " (cadr u))
-                            (nth 4 x) nil nil))))))))))
+                    (setq vals (ktmat:uniq (mapcar '(lambda (x) (ktmat:round (* 1000.0 (cadr x)))) c))
+                          off  (apply 'min (mapcar '(lambda (d) (abs (- (car (car c)) (car (car d))))) dcls)))
+                    (if (not (and (cdr vals) (> off 1000.0)))
+                      (setq bad (append bad c))))))
+              ;; hinh ve phong to k lan (chi tiet x5): moi ky hieu sai cung 1 he so -> bo qua
+              (setq ref (car (car dcls)) ks nil)
+              (foreach x bad
+                (if (> (abs (- (cadr x) (cadr ref))) 1e-6)
+                  (setq ks (cons (/ (- (nth 3 x) (nth 3 ref)) (* 1000.0 (- (cadr x) (cadr ref)))) ks))))
+              (if (and (cdr bad) (= (length ks) (length bad)) (setq k (ktmat:same-k ks)))
+                (kt:add "KHOP" "KHOP-PHONGTO" "GOIY"
+                        (strcat "Cao do trong " (cadr u) " ve phong to x" (rtos k 2 1)
+                                " (chi tiet phong to?): khong kiem vi tri cao do")
+                        (nth 5 (car bad)) nil nil)
+                (foreach x bad
+                  (setq best nil)
+                  (foreach d dcls
+                    (setq err (abs (- (car x) (car (car d)))))
+                    (if (or (null best) (< err (car best))) (setq best (list err (car d)))))
+                  ;; (cadr best): ky hieu moc (moc giatri x y loai ename)
+                  (if (> (car best) tollv)
+                    (progn
+                      (setq meas (+ (cadr (cadr best)) (/ (- (nth 3 x) (nth 3 (cadr best))) 1000.0)))
+                      (kt:add "KHOP" "KHOP-CAODO-VITRI" "LOI"
+                              (strcat "Cao do " (ktmat:lvstr (cadr x)) " dat sai vi tri, do duoc "
+                                      (ktmat:lvstr meas) " theo moc " (ktmat:lvstr (cadr (cadr best)))
+                                      " (lech " (ktmat:mm (car best)) "mm) - " (cadr u))
+                              (nth 5 x) nil nil)))))))))))
 )
 
 (defun ktmat:lvset (u levs / vals k)
@@ -710,19 +767,31 @@
   (vl-some '(lambda (x) (<= (abs (- (car x) k)) 1)) vals)
 )
 
-(defun ktmat:chk-lvcross (units levs nearm / sets vals mx lo hi nmm s1 s2 rest)
-  ;; giua cac mat dung / mat cat: cao do dinh + cao do lech gan nhau
+(defun ktmat:planvals (units levs / res)
+  ;; cao do ghi tren cac mat bang (khong phai mat dung/mat cat)
+  (foreach u units
+    (if (and (member "MB" (nth 3 u)) (not (ktmat:isel u)))
+      (setq res (append res (ktmat:lvset u levs)))))
+  res
+)
+
+(defun ktmat:chk-lvcross (units levs nearm / sets vals mx lo hi nmm s1 rest pl sev)
+  ;; giua cac mat dung / mat cat.
+  ;; - Cao do dinh khac nhau thuong HOP LE (mat cat qua tum thang, mat dung chi toi tuong chan mai)
+  ;;   -> mac dinh tat; SETTING KHOP_CAODO_DINH=1 de bat (GOIY).
+  ;; - Cap gia tri lech nhau <= CAODO_LECH_NGHI ma ban kia khong co: CANHBAO neu 1 trong 2 gia tri
+  ;;   co tren mat bang (cao do san), nguoc lai GOIY (cao do bau cua / lanh to / day dam...).
   (foreach u units
     (if (and (ktmat:isel u) (setq vals (ktmat:lvset u levs)))
       (setq sets (cons (list u vals) sets))))
-  (setq sets (reverse sets))
+  (setq sets (reverse sets) pl (ktmat:planvals units levs))
   (if (cdr sets)
     (progn
       (setq mx (mapcar '(lambda (s) (last (cadr s))) sets)
             lo (apply 'min (mapcar 'car mx))
             hi (apply 'max (mapcar 'car mx)))
-      (if (> (- hi lo) 1)
-        (kt:add "KHOP" "KHOP-CAODO" "CANHBAO"
+      (if (and (> (- hi lo) 1) (= 1 (fix (kt:cfg-num "KHOP_CAODO_DINH" 0))))
+        (kt:add "KHOP" "KHOP-CAODO" "GOIY"
                 (strcat "Cao do dinh khac nhau giua cac mat dung/mat cat: "
                         (kt:join (mapcar '(lambda (s) (strcat (cadr (car s)) " = "
                                                               (ktmat:lvstr (/ (car (last (cadr s))) 1000.0))))
@@ -739,27 +808,36 @@
                 (if (and (not (ktmat:has (cadr s1) (car b)))
                          (> (abs (- (car a) (car b))) 1)
                          (<= (abs (- (car a) (car b))) nmm))
-                  (kt:add "KHOP" "KHOP-CAODO" "CANHBAO"
-                          (strcat "Cao do lech nhau: " (cadr (car s1)) " = "
-                                  (ktmat:lvstr (/ (car a) 1000.0)) ", " (cadr (car s2)) " = "
-                                  (ktmat:lvstr (/ (car b) 1000.0)) " (lech "
-                                  (itoa (abs (- (car a) (car b)))) "mm)")
-                          (list (cdr a) (cdr b)) nil nil))))))
+                  (progn
+                    (setq sev (if (or (ktmat:has pl (car a)) (ktmat:has pl (car b))) "CANHBAO" "GOIY"))
+                    (kt:add "KHOP" "KHOP-CAODO" sev
+                            (strcat "Cao do lech nhau: " (cadr (car s1)) " = "
+                                    (ktmat:lvstr (/ (car a) 1000.0)) ", " (cadr (car s2)) " = "
+                                    (ktmat:lvstr (/ (car b) 1000.0)) " (lech "
+                                    (itoa (abs (- (car a) (car b)))) "mm)")
+                            (list (cdr a) (cdr b)) nil nil)))))))
         (setq rest (cdr rest)))))
 )
 
-(defun ktmat:chk-lvplan (units levs / ref vals ens)
-  ;; cao do ghi tren mat bang phai co tren mat cat (khong co mat cat: mat dung)
-  (foreach u units
-    (if (member "MC" (nth 3 u)) (setq ref (append ref (ktmat:lvset u levs)))))
-  (if (null ref)
-    (foreach u units
-      (if (member "MD" (nth 3 u)) (setq ref (append ref (ktmat:lvset u levs))))))
+(defun ktmat:chk-lvplan (units levs nearm / mode nmm ref ens)
+  ;; cao do ghi tren mat bang phai co tren mat cat (khong co mat cat: mat dung).
+  ;; SETTING KHOP_CAODO_MB: 0 tat; 1 (mac dinh) chi bao gia tri GAN 1 cao do mat cat
+  ;; (lech 1mm..CAODO_LECH_NGHI, nghi ghi nham); 2 bao moi gia tri khong co (nhieu: WC, san...).
+  (setq mode (fix (kt:cfg-num "KHOP_CAODO_MB" 1)) nmm (ktmat:round (* 1000.0 nearm)))
+  (if (> mode 0)
+    (progn
+      (foreach u units
+        (if (member "MC" (nth 3 u)) (setq ref (append ref (ktmat:lvset u levs)))))
+      (if (null ref)
+        (foreach u units
+          (if (member "MD" (nth 3 u)) (setq ref (append ref (ktmat:lvset u levs))))))))
   (if ref
     (foreach u units
       (if (and (member "MB" (nth 3 u)) (not (ktmat:isel u)))
         (foreach a (ktmat:lvset u levs)
-          (if (not (ktmat:has ref (car a)))
+          (if (and (not (ktmat:has ref (car a)))
+                   (or (>= mode 2)
+                       (vl-some '(lambda (r) (<= (abs (- (car r) (car a))) nmm)) ref)))
             (progn
               (setq ens (mapcar '(lambda (x) (nth 5 x))
                                 (vl-remove-if-not
@@ -773,7 +851,7 @@
 )
 
 ;;; ---------- chay ----------
-(defun ktmat:run (/ units data seqs tol tollv nearm)
+(defun ktmat:run (/ units data ax seqs tol tollv nearm)
   (if (kt:cfg-ok)
     (progn
       (kt:begin "KHOP")
@@ -789,11 +867,12 @@
         (progn
           (setq *KT:MATU* units)
           (setq data (ktmat:try "thu thap truc/cao do/dim" 'ktmat:collect nil))
-          (setq seqs (ktmat:try "khoang cach truc" 'ktmat:chk-axes (list units (car data) tol)))
-          (ktmat:try "dim truc" 'ktmat:chk-dims (list units seqs (caddr data) tol))
+          (setq ax   (ktmat:try "khoang cach truc" 'ktmat:chk-axes (list units (car data) tol))
+                seqs (car ax))
+          (ktmat:try "dim truc" 'ktmat:chk-dims (list units seqs (caddr data) tol (cadr ax)))
           (ktmat:try "vi tri cao do" 'ktmat:chk-lvpos (list units (cadr data) tollv))
           (ktmat:try "cao do giua cac ban ve" 'ktmat:chk-lvcross (list units (cadr data) nearm))
-          (ktmat:try "cao do mat bang" 'ktmat:chk-lvplan (list units (cadr data)))
+          (ktmat:try "cao do mat bang" 'ktmat:chk-lvplan (list units (cadr data) nearm))
           (princ (strcat "\n[KHOP] " (itoa (length units)) " ban ve, "
                          (itoa (length (car data))) " ky hieu truc, "
                          (itoa (length (cadr data))) " cao do, "

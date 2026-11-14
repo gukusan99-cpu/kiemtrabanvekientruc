@@ -117,6 +117,7 @@
                (c:KTN     "KTN/KTP : zoom toi loi tiep theo / truoc do")
                (c:KTX     "KTX     : xoa danh dau + danh sach loi")
                (c:KTBC    "KTBC    : xuat bao cao CSV")
+               (c:KTPROBE "KTPROBE : do kha nang phan mem CAD (chay dau tien tren VinaCAD)")
                (c:KTHELP  "KTHELP  : danh sach lenh"))
     (setq ok (ktall:defined (car x)))
     (princ (strcat "\n  " (cadr x) (if ok "" "   (chua nap)"))))

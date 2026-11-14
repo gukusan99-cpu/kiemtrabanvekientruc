@@ -55,6 +55,7 @@
   ;; up = ten layer viet HOA. T neu bo qua (xref, KT_CHECK, LAYER_BO_QUA)
   (or (vl-string-search "|" up)
       (= up (strcase *KT:LAYER*))
+      (= up "CHECK_DIM_OVERLAP")                       ; layer danh dau cua lisp CDO
       (and *KT:LAYSKIP* (kt:wcmatch-any up *KT:LAYSKIP*)))
 )
 
@@ -147,16 +148,19 @@
 )
 
 ;;; ---------- 3. Doi tuong tren layer 0 ----------
-(defun ktlay:chk-layer0 (/ ss i en ed)
+(defun ktlay:chk-layer0 (/ ss i en ed kh sp)
+  ;; Model -> LOI; layout -> CANHBAO. Bo qua block khung ten (thuong chen o layer 0 tren layout)
+  (setq kh (kt:frame-names))
   (if (setq ss (ssget "_X" '((8 . "0") (-4 . "<NOT") (0 . "VIEWPORT") (-4 . "NOT>"))))
     (progn
       (setq i 0)
       (repeat (sslength ss)
-        (setq en (ssname ss i) ed (entget en) i (1+ i))
-        (kt:add "LAYER" "LAYER-0" "LOI"
-                (strcat (kt:dxf 0 ed) " ve tren layer 0 (" (kt:space ed)
-                        "), can chuyen sang layer chuan")
-                en nil nil))))
+        (setq en (ssname ss i) ed (entget en) i (1+ i) sp (kt:space ed))
+        (if (not (and kh (= (kt:dxf 0 ed) "INSERT") (kt:wcmatch-any (kt:effname en) (mapcar 'kt:wcesc kh))))
+          (kt:add "LAYER" "LAYER-0" (if (= sp "Model") "LOI" "CANHBAO")
+                  (strcat (kt:dxf 0 ed) " ve tren layer 0 (" sp
+                          "), can chuyen sang layer chuan")
+                  en nil nil)))))
 )
 
 ;;; ---------- 4. Mau/linetype/lineweight gan rieng (ByObject) ----------
@@ -221,8 +225,7 @@
     (setq off (< (nth 2 L) 0)
           frz (= 1 (logand 1 (nth 3 L))))
     (if (and (or off frz)
-             (not (vl-string-search "|" (nth 1 L)))
-             (/= (nth 1 L) (strcase *KT:LAYER*)))
+             (not (ktlay:ignored (nth 1 L))))
       (progn
         (setq cr (ktlay:laycount (car L))
               st (cond ((and off frz) "tat + dong bang") (off "tat") (T "dong bang")))
@@ -277,6 +280,8 @@
               (while (and (< i (sslength ss)) (< (length found) (length names)))
                 (setq en (ssname ss i) i (1+ i)
                       up (strcase (cond ((kt:dxf 2 (entget en))) (""))))
+                ;; dynamic block: ten *U.. -> ten that
+                (if (wcmatch up "`*U*") (setq up (strcase (kt:str (kt:effname en)))))
                 (if (and (member up names) (not (assoc up found)))
                   (setq found (cons (cons up en) found))))))
           (foreach x (reverse res)
