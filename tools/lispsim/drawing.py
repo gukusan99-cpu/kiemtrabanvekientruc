@@ -372,19 +372,21 @@ class Drawing:
             pts = [(c[0] + math.cos(t) * m[0] + math.sin(t) * mn[0], c[1] + math.cos(t) * m[1] + math.sin(t) * mn[1],
                     c[2]) for t in [t0 + (t1 - t0) * k / n for k in range(n + 1)]]
         elif t == "HATCH":
-            # bo diem 10 dau (elevation) ; lay dinh/diem bien (10/11) cua cac duong bien
-            pp = []
-            for c_, v in e.data:
-                if c_ == 98:
-                    break           # diem seed
-                if c_ in (10, 11) and isinstance(v, tuple):
-                    pp.append(v)
-            pts = pp[1:] if len(pp) > 1 else []
+            pts = hatch_points(e)
         elif t in ("IMAGE", "WIPEOUT"):
             o, u, v, sz = e.get(10), e.get(11), e.get(12), e.get(13)
             if o and u and v and sz:
-                pts = [(o[0] + u[0] * i * sz[0] + v[0] * j * sz[1], o[1] + u[1] * i * sz[0] + v[1] * j * sz[1], 0.0)
-                       for i in (0, 1) for j in (0, 1)]
+                bnd = [q for c_, q in e.data if c_ == 14]
+                if len(bnd) == 2:
+                    (x1, y1), (x2, y2) = bnd[0][:2], bnd[1][:2]
+                    bnd = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+                if not bnd:
+                    bnd = [(-0.5, -0.5), (sz[0] - 0.5, -0.5), (sz[0] - 0.5, sz[1] - 0.5), (-0.5, sz[1] - 0.5)]
+                ox = o[0] + u[0] * 0.5 - v[0] * 0.5
+                oy = o[1] + u[1] * 0.5 - v[1] * 0.5
+                hh = sz[1]
+                pts = [(ox + u[0] * q[0] + v[0] * (hh - q[1]), oy + u[1] * q[0] + v[1] * (hh - q[1]), 0.0)
+                       for q in bnd]
         elif t == "POLYLINE":
             pts = [se.get(10) for se in e.subs if se.type == "VERTEX" and se.get(10)]
         elif t in ("SPLINE", "LEADER", "SOLID", "3DFACE", "TRACE", "MLINE", "POINT", "XLINE", "RAY",
@@ -438,6 +440,48 @@ class Drawing:
                 pts = [(-p[0], p[1], -p[2]) for p in pts]      # OCS (0 0 -1) -> WCS: x -> -x
         return (tuple(min(p[i] for p in pts) for i in range(3)),
                 tuple(max(p[i] for p in pts) for i in range(3)))
+
+
+def hatch_points(e):
+    """dinh / diem dac trung cua duong bien HATCH (dung truoc seed 98)"""
+    pts = []
+    data = e.data
+    i, n = 0, len(data)
+    while i < n and data[i][0] != 91:
+        i += 1
+    poly = False
+    et = 0
+    center = None
+    while i < n:
+        c, v = data[i]
+        if c == 98:
+            break
+        if c == 92:
+            poly = bool(v & 2)
+            et = 0
+        elif c == 72 and not poly:
+            et = v
+            center = None
+        elif c == 10 and isinstance(v, tuple):
+            if poly or et in (1, 4, 0):
+                pts.append(v)
+            else:
+                center = v
+        elif c == 11 and isinstance(v, tuple):
+            if not poly and et == 1:
+                pts.append(v)
+            elif et == 3 and center is not None:
+                r = math.hypot(v[0], v[1])
+                pts += [(center[0] - r, center[1] - r), (center[0] + r, center[1] + r)]
+            elif et == 4:
+                pts.append(v)
+        elif c == 40 and et == 2 and center is not None:
+            pts += [(center[0] - v, center[1] - v), (center[0] + v, center[1] + v)]
+            center = None
+        i += 1
+    z = (e.get(10) or (0.0, 0.0, 0.0))
+    z = z[2] if len(z) > 2 else 0.0
+    return [(p[0], p[1], z) for p in pts]
 
 
 def arc_points(c, r, a1, a2):
