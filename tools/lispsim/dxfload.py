@@ -31,6 +31,8 @@ GIOI HAN da biet:
   chu (TEXT/MTEXT/textbox) van uoc luong 0.75*h*so ky tu (khong co font that).
 - tblsearch "DIMSTYLE"/"STYLE"/... tra danh sach tag cua ban ghi (bo 5/105/330/100/102/360) - AutoCAD
   tra them vai ma suy ra (vd ten block mui ten DIMBLK dang chuoi o ma 5/6/7 kieu R12); khong mo phong.
+- MTEXT: DXF (vd ban luu tu phan mem khac) co the khong ghi 42/43 (rong/cao thuc) ma entget AutoCAD
+  luon co -> bo sung uoc luong 0.75*h*so ky tu dong dai nhat / so dong*h*5/3.
 - Header: chi nap cac bien $ thuong dung vao getvar (EXTMIN/EXTMAX/DIMSCALE/LTSCALE/INSUNITS/...).
 """
 import math
@@ -304,6 +306,37 @@ DEFAULTS = {
 GRAPHIC_SKIP = {"BLOCK", "ENDBLK"}
 
 
+_MT_CODES = None
+
+
+def mtext_plain(s):
+    """bo ma dinh dang MTEXT -> list dong chu thuan (uoc luong kich thuoc)"""
+    import re
+    global _MT_CODES
+    if _MT_CODES is None:
+        _MT_CODES = re.compile(r"\\[ACcFfHhQqTtWw][^;]*;|\\[LlOoKk]|\\S([^;]*);|[{}]")
+    s = s.replace("\\P", "\n").replace("\\~", " ")
+    s = re.sub(r"\\U\+[0-9A-Fa-f]{4}", "x", s)
+    s = _MT_CODES.sub(lambda m: (m.group(1) or "").replace("^", "/").replace("#", "/"), s)
+    s = s.replace("\\\\", "\\")
+    return s.split("\n")
+
+
+def mtext_size(data):
+    """(42 . rong) (43 . cao) uoc luong cho MTEXT (AutoCAD tinh tu font; DXF co the khong ghi)"""
+    txt = "".join(v for c, v in data if c in (3, 1) and isinstance(v, str))
+    h = next((v for c, v in data if c == 40), 2.5) or 2.5
+    lines = mtext_plain(txt)
+    w = 0.75 * h * max(1, max(len(x) for x in lines))
+    ref = next((v for c, v in data if c == 41), 0.0) or 0.0
+    if ref > 0 and w > ref:
+        w = ref
+    n = len(lines)
+    sp = next((v for c, v in data if c == 44), 1.0) or 1.0
+    hh = h * (n + (n - 1) * (5.0 / 3.0 * sp - 1.0))
+    return w, hh
+
+
 def finish_data(etype, data, layout, kind):
     """sap lai header giong entget AutoCAD + them mac dinh"""
     hdr, rest = [], list(data)
@@ -345,6 +378,12 @@ def finish_data(etype, data, layout, kind):
             out.append((8, "0"))
         rest = out + body
         have = {c for c, _ in rest}
+        if etype == "MTEXT" and (42 not in have or 43 not in have):
+            w, hh = mtext_size(rest)
+            if 42 not in have:
+                rest.append((42, w))
+            if 43 not in have:
+                rest.append((43, hh))
         for c, v in DEFAULTS.get(etype, ()):
             if c not in have and v is not None:
                 rest.append((c, v))

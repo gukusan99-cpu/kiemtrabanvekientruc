@@ -9,10 +9,17 @@
 ;;;
 ;;; Ma loi:
 ;;;   DIM-STYLE  (LOI)     dimstyle khong co trong muc DIMSTYLE chuan (1 dong/style)
-;;;   DIM-TYLE   (LOI/CANHBAO) DIMSCALE hieu dung khong khop ty le khung/viewport
-;;;                        (CANHBAO neu khop 1 TY_LE_CHO_PHEP nho hon: hinh chi tiet trong khung)
+;;;   DIM-TYLE   (LOI/CANHBAO) chieu cao chu dim QUY RA GIAY khong thuoc CAO_CHU_DIM:
+;;;                        hp = DIMTXT hieu dung x (DIMSCALE neu > 0, khong thi 1) / TL khung (hoac viewport)
+;;;                        DIMTXT hieu dung = chieu cao co dinh cua textstyle dim (neu > 0) > override > style.
+;;;                        Lech <= 25% gia tri chuan gan nhat -> CANHBAO, hon -> LOI. Dung cho ca quy cach
+;;;                        "DIMSCALE = TL" (1-100: dimscale 100, dimtxt 2) lan "DIMSCALE = 0, DIMTXT theo don vi
+;;;                        ban ve" (DG 1-100 (200): dimscale 0, dimtxt 150). DIMSCALE 0 trong Model = 1.
 ;;;   DIM-LFAC   (LOI/CANHBAO) DIMLFAC hieu dung khac chuan cua style
-;;;                        (CANHBAO neu DIMLFAC x TL khung thuoc TY_LE_CHO_PHEP: chi tiet ve phong to)
+;;;                        (CANHBAO neu 1/DIMLFAC = 2, 2.5, 4, 5, 10, 20: chi tiet phong to ghi de DIMLFAC
+;;;                        thay vi dung dimstyle "x2/x4"; hoac DIMLFAC x TL khung thuoc TY_LE_CHO_PHEP)
+;;;              (CANHBAO) 2 dim cung phuong chung diem chan nhung khac DIMLFAC (vd dim style x4 cua chi
+;;;                        tiet phong to noi tiep dim thuong) -> 1 trong 2 hien sai so
 ;;;   DIM-GHIDE  (LOI/CANHBAO) chu dim bi ghi de (so sai / van ban)
 ;;;   DIM-LE     (CANHBAO) gia tri do le so voi boi so chan (bat diem sai)
 ;;;   DIM-ASSOC  (GOIY)    dim khong lien ket (mac dinh tat: KIEM_DIM_ASSOC|1)
@@ -24,6 +31,8 @@
 ;;;   DIM-CHUDIM (CANHBAO) chu dim de len duong dim khac     (thuat toan CDO)
 ;;;
 ;;; SETTING dung (KT_ChuanCongTy.txt, muc SETTING):
+;;;   CAO_CHU_DIM (mm giay; khong co -> suy tu muc DIMSTYLE: dimtxt neu dimscale > 0,
+;;;   dimtxt / TL trong ten "1-100" neu dimscale = 0; khong suy duoc -> CAO_CHU_GIAY)
 ;;;   DIM_DUNG_SAI_TL (0.1)  DIM_HO_CHU (0.0)  DIM_BUOC_CHAN (1)
 ;;;   DIM_LECH_LE (0.05)  DUNG_SAI_KICH_THUOC (1)  KIEM_DIM_ASSOC (0)  TY_LE_CHO_PHEP
 ;;;   LAYER_BO_QUA (dim tren cac layer nay bo qua)
@@ -31,6 +40,7 @@
 ;;; Gia dinh: ban ve 2D, dim trong WCS, don vi mm.
 ;;; ============================================================
 
+; lisplint: extern kt:cfg-keys kt:ukey kt:msort kt:parse-scale
 ;;; lisplint: extern kt:cfg-ok kt:begin kt:add kt:finish kt:cfg kt:cfg-row kt:cfg-names kt:cfg-num kt:cfg-list kt:ss-all kt:ss->list kt:dxf kt:2d kt:space kt:scale-at kt:viewports kt:trim kt:num kt:wcmatch-any kt:join kt:inbox
 
 (vl-load-com)
@@ -44,16 +54,57 @@
         *KT:DIM-TOL*   (kt:cfg-num "DUNG_SAI_KICH_THUOC" 1.0)
         *KT:DIM-ASSOC* (= (fix (kt:cfg-num "KIEM_DIM_ASSOC" 0)) 1)
         *KT:DIM-SKIP*  (kt:cfg-list "LAYER_BO_QUA")
-        *KT:DIM-CFGSTY* (kt:cfg-names "DIMSTYLE")
+        *KT:DIM-CFGSTY* (kt:cfg-keys "DIMSTYLE")
         *KT:DIM-TLCP*  (vl-remove-if '(lambda (x) (or (null x) (<= x 0)))
                                        (mapcar 'kt:num (kt:cfg-list "TY_LE_CHO_PHEP")))
+        *KT:DIM-HS*    (ktdim:std-heights)
         *KT:DIM-STY*   nil
         *KT:DIM-BADSTY* nil
+        *KT:DIM-LFL*   nil
         *KT:DIM-SCERR* nil)
   (if (<= *KT:DIM-STEP* 0) (setq *KT:DIM-STEP* 1.0))
   (if (< *KT:DIM-TOLR* 0) (setq *KT:DIM-TOLR* 0.1))
   (if (< *KT:DIM-GAPR* 0) (setq *KT:DIM-GAPR* 0.0))
   T
+)
+
+;;; ---------- Chieu cao chu dim chuan (mm giay) ----------
+(defun ktdim:namescale (nm)
+  ;; ty le ghi trong ten dimstyle: "DG 1-30 (60) x4" -> 30, "JFP_DG 1- 20" -> 20, "1-100" -> 100
+  (kt:parse-scale (vl-string-translate "-" "/" (kt:str nm)))
+)
+
+(defun ktdim:std-heights (/ res ds tx ns h)
+  ;; SETTING CAO_CHU_DIM, khong co thi suy tu cac dong DIMSTYLE chuan, cuoi cung CAO_CHU_GIAY
+  (setq res (vl-remove-if '(lambda (x) (or (null x) (<= x 0)))
+                          (mapcar 'kt:num (kt:cfg-list "CAO_CHU_DIM"))))
+  (if (null res)
+    (foreach r (kt:cfg "DIMSTYLE")
+      (setq ds (kt:num (nth 1 r)) tx (kt:num (nth 3 r)) ns (ktdim:namescale (car r)) h nil)
+      (cond ((and ds tx (> ds 0)) (setq h tx))
+            ((and tx ns (> tx 0)) (setq h (/ tx ns))))
+      (if (and h (> h 0) (not (vl-member-if '(lambda (x) (equal x h 1e-6)) res)))
+        (setq res (cons h res)))))
+  (if (null res)
+    (setq res (vl-remove-if '(lambda (x) (or (null x) (<= x 0)))
+                            (mapcar 'kt:num (kt:cfg-list "CAO_CHU_GIAY")))))
+  res
+)
+
+(defun ktdim:hdev (hp / best d)
+  ;; do lech tuong doi nho nhat cua hp so voi *KT:DIM-HS* (0 = khop)
+  (foreach h *KT:DIM-HS*
+    (setq d (/ (abs (- hp h)) h))
+    (if (or (null best) (< d best)) (setq best d)))
+  (cond ((null best) nil) ((<= best 0.03) 0.0) (T best))
+)
+
+(defun ktdim:tsheight (v / ted)
+  ;; chieu cao co dinh cua textstyle (340 = ename/handle), 0 neu khong co
+  (if (= (type v) 'STR) (setq v (vl-catch-all-apply 'handent (list v))))
+  (if (and (= (type v) 'ENAME) (setq ted (entget v)) (numberp (kt:dxf 40 ted)))
+    (kt:dxf 40 ted)
+    0.0)
 )
 
 ;;; ---------- Tien ich so ----------
@@ -65,6 +116,14 @@
   (cond ((>= f 0.5) (setq i (+ i 1.0)))
         ((<= f -0.5) (setq i (- i 1.0))))
   (* i step)
+)
+
+(defun ktdim:fmt2 (x / s)
+  ;; so -> chuoi toi da 2 so le, bo 0 cuoi: 1.50 -> "1.5", 2.0 -> "2", 1.714 -> "1.71"
+  (setq s (rtos x 2 2))
+  (if (vl-string-search "." s)
+    (setq s (vl-string-right-trim "." (vl-string-right-trim "0" s))))
+  s
 )
 
 (defun ktdim:fmt (x)
@@ -136,7 +195,8 @@
 )
 
 ;;; ---------- Thong tin dimstyle (cache theo ten) ----------
-;;; -> (row ds lf dec txt asz anno)   row = dong DIMSTYLE chuan (nil neu khong co)
+;;; -> (row ds lf dec txt asz anno tsh nsc)   row = dong DIMSTYLE chuan (nil neu khong co)
+;;;    tsh = chieu cao co dinh textstyle dim (0 = khong), nsc = TL trong ten style
 (defun ktdim:style (nm / key c te ed row dec anno res)
   (setq key (strcase nm))
   (if (setq c (assoc key *KT:DIM-STY*))
@@ -156,7 +216,9 @@
                       dec
                       (kt:dxf 140 ed)
                       (kt:dxf 41 ed)
-                      anno))
+                      anno
+                      (if ed (ktdim:tsheight (kt:dxf 340 ed)) 0.0)
+                      (ktdim:namescale nm)))
       (setq *KT:DIM-STY* (cons (cons key res) *KT:DIM-STY*))
       res))
 )
@@ -557,8 +619,32 @@
     (* meas lf))
 )
 
+(defun ktdim:geo (ed typ / p13 p14 a)
+  ;; chieu dai HINH HOC cua dim thang (rotated: chieu len phuong 50; aligned: khoang cach 13-14)
+  (setq p13 (kt:dxf 13 ed) p14 (kt:dxf 14 ed))
+  (if (and p13 p14)
+    (if (= typ 0)
+      (progn
+        (setq a (cond ((kt:dxf 50 ed)) (0.0)))
+        (abs (+ (* (- (car p14) (car p13)) (cos a)) (* (- (cadr p14) (cadr p13)) (sin a)))))
+      (distance (kt:2d p13) (kt:2d p14))))
+)
+
+(defun ktdim:nicek (lf / k)
+  ;; DIMLFAC cua chi tiet phong to: 1/lf = 2, 2.5, 4, 5, 10, 20 -> he so; nil neu khong
+  (if (and (numberp lf) (> lf 0) (< lf 1.0))
+    (progn
+      (setq k (/ 1.0 lf))
+      (if (vl-some '(lambda (n) (<= (abs (- k n)) (* 0.005 n))) '(2.0 2.5 4.0 5.0 10.0 20.0)) k)))
+)
+
+(defun ktdim:ovnorm (code v)
+  ;; DIMSCALE 0 (= 1 trong Model, = ty le viewport trong layout) coi nhu 1 khi so override
+  (if (and (= code 40) (numberp v) (<= v 0)) 1.0 v)
+)
+
 (defun ktdim:check1 (en rec / ed typ sty st row ovr anno ds lf lfraw lfstd dec sp p10 pt r
-                              h meas val txt g sc scs near dev x lst tv done sev)
+                              h meas val txt g sc scs near dev x lst tv done sev geo heff dse hp hpl dv k cands)
   (setq ed   (entget en '("ACAD" "AcadAnnotative"))
         typ  (logand (cond ((kt:dxf 70 ed)) (0)) 7)
         sty  (cond ((kt:dxf 3 ed)) ("STANDARD"))
@@ -587,43 +673,54 @@
                  ((and (< lfraw 0) (= sp "Model")) 1.0)
                  ((equal lfraw 0.0 1e-12) 1.0)
                  (T (abs lfraw))))
-  ;; gia tri do (42), du phong bang chieu dai duong dim
-  (setq meas (kt:dxf 42 ed))
-  (if (and (not (numberp meas)) rec (nth 4 rec))
-    (setq meas (distance (car (nth 4 rec)) (cadr (nth 4 rec)))))
-  (if (not (numberp meas)) (setq meas nil))
+  ;; meas = chieu dai HINH HOC, val = gia tri HIEN THI (= meas x DIMLFAC).
+  ;; Dim thang: tinh tu diem 13/14 (ma 42 cua AutoCAD = Measurement DA nhan DIMLFAC - template:
+  ;; style x4 do 100 ghi 42 = 25 -> khong dung 42 de khoi nhan DIMLFAC 2 lan). Dim khac: 42 = hien thi.
+  (setq geo  (if (member typ '(0 1)) (ktdim:geo ed typ))
+        meas (cond ((numberp geo) geo)
+                   ((and (member typ '(0 1)) rec (nth 4 rec)) (distance (car (nth 4 rec)) (cadr (nth 4 rec))))
+                   ((and (numberp (kt:dxf 42 ed)) (> lf 0)) (/ (kt:dxf 42 ed) lf))))
   (setq val (if meas (* meas lf)))
 
   ;; --- DIM-STYLE (gom theo style, xuat o ktdim:check) ---
-  (if (and *KT:DIM-CFGSTY* (not (member (strcase sty) *KT:DIM-CFGSTY*)))
+  (if (and *KT:DIM-CFGSTY* (not (member (kt:ukey sty) *KT:DIM-CFGSTY*)))
     (ktdim:badsty sty en))
 
-  ;; --- DIM-TYLE ---
+  ;; --- DIM-TYLE: chieu cao chu dim quy ra giay ---
   (if (not anno)
     (if (= sp "Model")
-      (if (> ds 0)
-        (progn
-          (setq sc  (ktdim:scale p10 sp)
-                scs (ktdim:vp-at p10))
-          (if (and (numberp sc) (> sc 0) (not (ktdim:sceq ds sc))
-                   (not (vl-remove-if-not '(lambda (v) (ktdim:sceq ds v)) scs)))
-            (progn
-              (setq done (cons 40 done)
-                    sev  (if (and (< ds sc) (ktdim:allowed-p ds)) "CANHBAO" "LOI"))
-              (kt:add "DIM" "DIM-TYLE" sev
-                      (strcat "Dim TL 1/" (ktdim:fmt ds) " nam trong khung TL 1/" (ktdim:fmt sc)
-                              " (dimstyle " sty ")"
-                              (if (= sev "CANHBAO")
-                                (strcat " - neu la hinh chi tiet TL 1/" (ktdim:fmt ds)
-                                        " trong cung khung thi bo qua")
-                                ""))
-                      en pt r)))))
+      (progn
+        (setq heff (if (and (numberp (nth 7 st)) (> (nth 7 st) 0))
+                     (nth 7 st)                                  ; textstyle co chieu cao co dinh
+                     (ktdim:eff ovr 140 (nth 4 st)))
+              dse  (if (> ds 0) ds 1.0)
+              sc   (ktdim:scale p10 sp))
+        (if (and (numberp heff) (> heff 0) (numberp sc) (> sc 0) *KT:DIM-HS*)
+          (progn
+            (setq scs   (ktdim:vp-at p10)
+                  cands (cons sc scs)
+                  hp    (/ (* heff dse) sc))
+            ;; khop chuan o TL khung hoac 1 viewport nhin thay dim -> dung
+            (if (not (vl-some '(lambda (c) (equal 0.0 (ktdim:hdev (/ (* heff dse) c)) 1e-9)) cands))
+              (progn
+                (setq dv   (ktdim:hdev hp)
+                      done (cons 40 (cons 140 done))
+                      sev  (if (and dv (<= dv 0.25)) "CANHBAO" "LOI")
+                      hpl  (kt:join (mapcar 'ktdim:fmt2 *KT:DIM-HS*) "/"))
+                (kt:add "DIM" "DIM-TYLE" sev
+                        (strcat "Chu dim cao " (ktdim:fmt2 hp) "mm giay (DIMTXT " (ktdim:fmt heff)
+                                (if (/= dse 1.0) (strcat " x DIMSCALE " (ktdim:fmt dse)) "")
+                                " / TL 1/" (ktdim:fmt sc) "), chuan " hpl "mm - dimstyle " sty
+                                (if (and (nth 8 st) (not (ktdim:sceq (nth 8 st) sc)))
+                                  (strcat " (style cho TL 1/" (ktdim:fmt (nth 8 st)) ")") "")
+                                (if (= sev "CANHBAO") " - gan chuan, kiem tra lai" ""))
+                        en pt r))))))
       (if (and (> ds 0) (> (abs (- ds 1.0)) 0.01))
         (progn
           (setq done (cons 40 done))
           (kt:add "DIM" "DIM-TYLE" "LOI"
                   (strcat "Dim trong layout '" sp "' co DIMSCALE=" (ktdim:fmt ds)
-                          " (phai la 1) - dimstyle " sty)
+                          " (phai la 1 hoac 0) - dimstyle " sty)
                   en pt r)))))
 
   ;; --- DIM-LFAC ---  (so gia tri HIEU DUNG voi chuan cua style)
@@ -634,18 +731,25 @@
            (not (and (/= sp "Model") (ktdim:vp-scale-p lf sp))))
     (progn
       (setq done (cons 144 done)
+            k    (ktdim:nicek lf)
             ;; chi tiet ve phong to trong khung (vd khung 1/100, ve x5, DIMLFAC 0.2 -> TL that 1/20)
             sc   (if (= sp "Model") (ktdim:scale p10 sp))
-            sev  (if (and (numberp sc) (> sc 0) (< lf 1.0) (ktdim:allowed-p (* lf sc)))
+            sev  (if (or k (and (numberp sc) (> sc 0) (< lf 1.0) (ktdim:allowed-p (* lf sc))))
                    "CANHBAO" "LOI"))
       (kt:add "DIM" "DIM-LFAC" sev
               (strcat "DIMLFAC=" (ktdim:fmt lfraw) " khac chuan " (ktdim:fmt lfstd)
                       " cua style " sty
-                      (if (= sev "CANHBAO")
-                        (strcat " - chi tiet phong to? (TL that 1/" (ktdim:fmt (* lf sc)) ")")
-                        " - dim do sai so")
+                      (cond (k (strcat " - chi tiet phong to x" (ktdim:fmt k)
+                                       "? nen dung dimstyle phong to cua cong ty (vd 'x" (ktdim:fmt k) "')"))
+                            ((= sev "CANHBAO")
+                             (strcat " - chi tiet phong to? (TL that 1/" (ktdim:fmt (* lf sc)) ")"))
+                            (T " - dim do sai so"))
                       (if val (strcat " (do " (ktdim:fmt meas) " hien " (ktdim:fmt val) ")") ""))
               en pt r)))
+  ;; ghi lai de xet dim cung chuoi khac DIMLFAC (ktdim:chk-lfmix)
+  (if (and (member typ '(0 1)) (kt:dxf 13 ed) (kt:dxf 14 ed) rec (nth 4 rec))
+    (setq *KT:DIM-LFL* (cons (list sp lf (caddr (nth 4 rec)) (kt:2d (kt:dxf 13 ed)) (kt:2d (kt:dxf 14 ed)) en)
+                             *KT:DIM-LFL*)))
 
   ;; --- DIM-GHIDE ---
   (setq txt (kt:dxf 1 ed))
@@ -682,7 +786,8 @@
              (assoc (car x) ovr)
              (numberp (setq tv (nth (caddr x) st)))
              (numberp (cdr (assoc (car x) ovr)))
-             (ktdim:neq (float (cdr (assoc (car x) ovr))) (float tv)))
+             (ktdim:neq (float (ktdim:ovnorm (car x) (cdr (assoc (car x) ovr))))
+                        (float (ktdim:ovnorm (car x) tv))))
       (setq lst (cons (strcat (cadr x) "=" (ktdim:fmt (cdr (assoc (car x) ovr)))
                               " (style " (ktdim:fmt tv) ")")
                       lst))))
@@ -696,6 +801,34 @@
 ;;; ============================================================
 ;;; Chay kiem tra tren danh sach dim
 ;;; ============================================================
+(defun ktdim:chk-lfmix (/ pts lst a b tol rest seen k)
+  ;; 2 dim thang cung khong gian, cung phuong, chung 1 diem chan (13/14) ma khac DIMLFAC -> CANHBAO
+  ;; (vd dim style x4 cua chi tiet phong to noi chuoi voi dim thuong: 1 trong 2 hien sai so)
+  (setq tol (max 0.5 (* 0.5 *KT:DIM-TOL*)))
+  ;; pts: (x y sp lf phuong en)
+  (foreach d *KT:DIM-LFL*
+    (foreach p (list (nth 3 d) (nth 4 d))
+      (setq pts (cons (list (car p) (cadr p) (nth 0 d) (nth 1 d) (nth 2 d) (nth 5 d)) pts))))
+  (setq lst (kt:msort pts '(lambda (a b) (< (car a) (car b)))))
+  (while lst
+    (setq a (car lst) lst (cdr lst) rest lst)
+    (while (and rest (<= (- (car (car rest)) (car a)) tol))
+      (setq b (car rest) rest (cdr rest))
+      (if (and (<= (abs (- (cadr b) (cadr a))) tol)
+               (= (nth 2 a) (nth 2 b))
+               (ktdim:neq (nth 3 a) (nth 3 b))
+               (< (abs (- (* (car (nth 4 a)) (cadr (nth 4 b))) (* (cadr (nth 4 a)) (car (nth 4 b))))) 1e-6)
+               (not (member (setq k (list (nth 5 a) (nth 5 b))) seen)))
+        (progn
+          (setq seen (cons k (cons (reverse k) seen)))
+          (kt:add "DIM" "DIM-LFAC" "CANHBAO"
+                  (strcat "2 dim cung phuong chung diem chan nhung khac DIMLFAC ("
+                          (ktdim:fmt (nth 3 a)) " / " (ktdim:fmt (nth 3 b))
+                          "): dim chi tiet phong to noi chuoi voi dim thuong? 1 trong 2 hien sai so")
+                  (list (nth 5 a) (nth 5 b)) (list (car a) (cadr a)) nil)))))
+  (setq *KT:DIM-LFL* nil)
+)
+
 (defun ktdim:check (lst / ed n nerr r rec pairs spaces nov)
   (ktdim:params)
   (kt:begin "DIM")
@@ -712,6 +845,9 @@
           (setq pairs (cons (cons (kt:space ed) rec) pairs)))
         (setq r (vl-catch-all-apply 'ktdim:check1 (list en rec)))
         (if (vl-catch-all-error-p r) (setq nerr (1+ nerr))))))
+  (setq r (vl-catch-all-apply 'ktdim:chk-lfmix nil))
+  (if (vl-catch-all-error-p r)
+    (princ (strcat "\n[DIM] Loi khi xet DIMLFAC chuoi dim: " (vl-catch-all-error-message r))))
   ;; DIM-STYLE: 1 dong / style khong chuan
   (foreach x (reverse *KT:DIM-BADSTY*)
     (kt:add "DIM" "DIM-STYLE" "LOI"

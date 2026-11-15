@@ -67,6 +67,7 @@ def tokenize(text):
 class Tile:
     def __init__(self, typ, line):
         self.type, self.line, self.attrs, self.children = typ, line, {}, []
+        self.parent = None
 
     def walk(self):
         yield self
@@ -115,6 +116,7 @@ def parse(text):
                 take()
                 typ, ln2 = take()
                 child = Tile(typ, ln2)
+                child.parent = tile
                 body(child)
                 tile.children.append(child)
                 continue
@@ -463,6 +465,16 @@ class DclSim:
             st["values"][key] = value
         elif t.type == "toggle":
             st["values"][key] = "0" if st["values"].get(key, "0") == "1" else "1"
+        if t.type == "radio_button":
+            value = "1" if value is None else value
+            st["values"][key] = value
+            if value == "1" and t.parent is not None:
+                for sib in t.parent.children:
+                    k2 = sib.attrs.get("key")
+                    if sib.type == "radio_button" and k2 and k2 != key:
+                        st["values"][k2] = "0"
+                if t.parent.attrs.get("key"):
+                    st["values"][t.parent.attrs["key"]] = key
         self._fire(key, st["values"].get(key, ""), reason)
 
     def _fire(self, key, value, reason, esc=False):

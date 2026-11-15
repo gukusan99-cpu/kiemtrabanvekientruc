@@ -1,0 +1,185 @@
+;;; ============================================================
+;;; KT_ChuanCongTy.txt - CHUAN CONG TY (Kien truc & Noi that Dong Giao) cho bo kiem tra ban ve KT
+;;; Sinh boi tools/template_analysis.py tu ban ve mau Template.dxf (61 khung KHUNGTEENA + 11 bia
+;;; KHUNGT43), DA CHON LOC: chi giu ho layer/dimstyle/textstyle cua cong ty, bo rac (xem
+;;; docs/TEMPLATE_ANALYSIS.md muc 'Rac trong template').
+;;; MA HOA: file ghi codepage cp1252. Ten giu DUNG nhu AutoLISP ANSI nhin thay: ky tu thuoc codepage
+;;;   = 1 byte (vd 'E sac' trong '1 NET THAY'), ky tu ngoai codepage = \U+XXXX (vd TRUC = TR\U+1EE4C).
+;;;   KHONG mo/luu lai file nay bang trinh soan thao doi sang UTF-8 (ten layer co dau se khong khop).
+;;; ------------------------------------------------------------
+;;; Dinh dang: moi dong  MUC|truong1|truong2|...   ; dong bat dau ';' la ghi chu
+;;;   LAYER|ten|mau(1-255)|linetype|lineweight(1/100mm, -3=mac dinh)|plot(1/0)
+;;;   DIMSTYLE|ten|dimscale|dimlfac|dimtxt|dimasz|textstyle|dimdec|annotative(1/0)
+;;;   TEXTSTYLE|ten|font (file hoac ho TrueType)|bigfont|chieu cao co dinh(0=khong)|width factor
+;;;   KHUNG|ten block|tag so hieu|tag ten ban ve(+tag dong 2...)|tag ty le|ty le goc|tag khac...
+;;;   BLOCK|ten block|vai tro (TRUC/CAODO/MATCAT/CHITIET/CUA/KHAC)|tag chinh|tag phu|diem goc x,y
+;;;   DANHMUC|so hieu|ten ban ve      SETTING|KHOA|gia tri
+;;; ============================================================
+
+; ---------- SETTING ----------
+; CAO_CHU_GIAY: chieu cao chu IN TREN GIAY (mm) = chieu cao that / ty le khung (dung sai 3%).
+;   Thong ke tu template (chu ngoai block, style cong ty, gia tri >= 10 lan; bo to bia va khung 1/35):
+;   0.75 ten do noi that, 1.25 dien tich phong, 1.8 ten phong, 2.0/2.2/2.5 ghi chu, 3.3 bang thong ke
+;   cua, 4.0/5.0 ten hinh ve. Them 10 = tieu de to bia.
+SETTING|CAO_CHU_GIAY|0.75,1.25,1.80,2,2.20,2.50,3.35,4,5,10
+; CAO_CHU_DIM: chieu cao chu DIM tren giay (mm) = DIMTXT hieu dung x (DIMSCALE neu >0, khong thi 1)
+;   / ty le khung. Cong ty de DIMSCALE=0 va DIMTXT theo don vi ban ve: DG 1-100 (200) 150 -> 1.5mm,
+;   DG 1-30 (60) 60 -> 2.0mm o 1/30, TL 1-60 (120) 120 -> 2.0mm o 1/60. Lech <= 25% -> CANHBAO, hon -> LOI.
+SETTING|CAO_CHU_DIM|1.50,2
+; TY_LE_CHO_PHEP: mau so ty le duoc phep. Template dung: 1/20, 1/30, 1/35, 1/60, 1/100.
+SETTING|TY_LE_CHO_PHEP|1,2,5,10,15,20,25,30,35,50,60,75,100,150,200,250,500
+; LAYER_MAU_BYLAYER: 1 = doi tuong bat buoc mau/linetype ByLayer.
+SETTING|LAYER_MAU_BYLAYER|1
+; MAU_BYOBJ_BO_QUA: HATCH mau 8 (xam) gan rieng la thoi quen cua template (157 hatch).
+SETTING|MAU_BYOBJ_BO_QUA|HATCH
+SETTING|MAX_LOI_MOI_MA|300
+SETTING|DUNG_SAI_KICH_THUOC|1
+; LAYER_BO_QUA: *|* = layer xref. KT_CHECK / CHECK_DIM_OVERLAP = layer danh dau.
+SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,CHECK_DIM_OVERLAP,*|*
+; KHUNG_TRUNGTEN_LIENTIEP: 0 = khong bao trung ten khi cac to cung ten co so hieu LIEN TIEP cung
+;   tien to (bo nhieu to 'CHI TIET CUA' C/01..C/07 - quy cach cong ty), 1 = bao GOIY.
+SETTING|KHUNG_TRUNGTEN_LIENTIEP|0
+; FONT_CHO_PHEP: file font cua textstyle cong ty (TrueType theo ho -> khong co file).
+SETTING|FONT_CHO_PHEP|arial.ttf,arialbd.ttf
+
+; ---------- LAYER: ten|mau|linetype|lineweight|plot ----------
+; Ho cong ty: '0', 'Defpoints', '1 <TEN>' (co dau cach). Layer '1-xxx' (khong cach) la cua chi tiet
+; chong tham copy tu file khac (CTH/01) -> rac, khong dua vao chuan.
+LAYER|0|7|Continuous|-3|1
+LAYER|1 C\U+1ED8T|1|Continuous|25|1
+LAYER|1 C\U+1EECA|38|Continuous|5|1
+LAYER|1 DIM|251|Continuous|5|1
+LAYER|1 GHI CHÚ|92|Continuous|9|1
+LAYER|1 HATCH|8|Continuous|-3|1
+LAYER|1 KHÔNG IN|136|Continuous|9|0
+LAYER|1 KÍ HI\U+1EC6U|3|Continuous|5|1
+LAYER|1 NET SIÊU M\U+1EDC|35|Continuous|0|1
+LAYER|1 NÉT C\U+1EAET BT|2|Continuous|25|1
+LAYER|1 NÉT KHU\U+1EA4T|128|DASHED2|9|1
+LAYER|1 NÉT M\U+1EA2NH|56|Continuous|9|1
+LAYER|1 NÉT TH\U+1EA4Y|254|Continuous|13|1
+LAYER|1 N\U+1ED8I TH\U+1EA4T|37|Continuous|5|1
+LAYER|1 TEXT|7|Continuous|20|1
+LAYER|1 TR\U+1EE4C|15|CENTER|5|1
+LAYER|1 T\U+01AF\U+1EDCNG|4|Continuous|25|1
+LAYER|Defpoints|1|Continuous|-3|0
+
+; ---------- DIMSTYLE: ten|dimscale|dimlfac|dimtxt|dimasz|textstyle|dimdec|annotative ----------
+; Quy cach: DIMSCALE = 0, DIMTXT/DIMASZ theo don vi ban ve (mm model). 'DG 1-<TL> (<chu>)' cho khung
+; 1/<TL>; ban 'x2'/'x4' (DIMLFAC 0.5/0.25) chi dung cho chi tiet VE PHONG TO 2/4 lan trong khung 1/30.
+; Luu y: 'DG 1-100 (200)' ten ghi (200) nhung DIMTXT = 150 (chu 1.5mm).
+DIMSTYLE|DG 1-100 (200)|0|1|150|60|mb tret$0$DIMENSION|0|0
+DIMSTYLE|DG 1-30 (60)|0|1|60|20|mb tret$0$DIMENSION|0|0
+DIMSTYLE|DG 1-30 (60) x2|0|0.500|60|20|mb tret$0$DIMENSION|0|0
+DIMSTYLE|DG 1-30 (60) x4|0|0.250|60|20|mb tret$0$DIMENSION|0|0
+DIMSTYLE|TL 1-60 (120)|0|1|120|40|mb tret$0$DIMENSION|0|0
+
+; ---------- TEXTSTYLE: ten|font|bigfont|cao co dinh|width ----------
+; '0 ARIAL 2'/'0 ARIAL 2.5'/'0 ARIAL TEN' cao co dinh 200/250/400 (= 2/2.5/4mm o 1/100);
+; '0_T_*' dung trong khung ten/COTCAODO; 'mb tret$0$DIMENSION' la textstyle cua dimstyle DG/TL
+; (font VNI-Helve-Condense); 'VHAVANT'/'bold' cua to bia KHUNGT43 (font TCVN3 .VnAvantH).
+TEXTSTYLE|0 ARIAL 2|arial.ttf||200|1
+TEXTSTYLE|0 ARIAL 2.5|arial.ttf||250|1
+TEXTSTYLE|0 ARIAL TÊN|arialbd.ttf||400|1
+TEXTSTYLE|0_T_Arial|arial.ttf||2|1
+TEXTSTYLE|0_T_Arial 1.2|arial.ttf||1.200|1
+TEXTSTYLE|0_T_Arial Bold 2|arialbd.ttf||2|1
+TEXTSTYLE|0_T_Arial Bold 2.5|arialbd.ttf||2.500|1
+TEXTSTYLE|Arial|arial.ttf||0|1
+TEXTSTYLE|bold|.VnAvantH||0|1
+TEXTSTYLE|mb tret$0$DIMENSION|VNI-Helve-Condense||0|1
+TEXTSTYLE|Standard|arial.ttf||0|1
+TEXTSTYLE|VHAVANT|.VnAvantH||0|1
+
+; ---------- KHUNG: block|tag so hieu|tag ten(+dong 2)|tag ty le|ty le goc|tag khac ----------
+; KHUNGTEENA: khung A3 ve san o 1/100 (block 42000x29700) -> ty le goc 100; scale X 0.6 = 1/60, 0.3 = 1/30 ...
+;   Ten ban ve = TEN_BAN_VE + TEN_CONG_TRINH (vd 'MAT BANG CONG NANG' + 'TANG 1 & TANG 2').
+KHUNG|KHUNGTEENA|SO_HIEU_BV|TEN_BAN_VE+TEN_CONG_TRINH|TY_LE|100
+; KHUNGDIENNUOC: khung cung mau (them NGAY/NGUOI THIET KE/HO SO), dung cho to PHOI CANH PC/01.
+KHUNG|KHUNGDIENNUOC|SO_HIEU_BV|TEN_BAN_VE+TEN_CONG_TRINH|TY_LE|100|NGAY|TEN_NGUOI_THIET_KE|HOSO
+; KHUNGT43: to bia hang muc (khong attribute) cung kho A3; scale X 1.852 x 54 = 1/100.
+KHUNG|KHUNGT43||||54
+
+; ---------- BLOCK: ten|vai tro|tag chinh|tag phu (so ban ve tham chieu)|diem goc x,y ----------
+; TRUC: diem chen = DUOI duoi cua ky hieu (nam tren duong truc), vong tron o phia tren 400 x scale.
+; CAODO: diem goc = dinh tam giac tren vach cao do, trong block o (x,y) cot 6; diem chen KHONG nam
+;   tren vach (lech 49 x scale) -> KTKHOP doi diem goc qua scale/mirror/xoay cua tung lan chen.
+BLOCK|TR\U+1EE4C|TRUC|A
+BLOCK|COTCAODO|CAODO|COTE||-88.25,-49.03
+; KI HIEU CODE MB: ky hieu cao do tren MAT BANG (tag ten '+0.000', gia tri '+7.450', '%%P0.000').
+BLOCK|KI HIEU CODE MB|CAODO|+0.000||0,0
+; GHICHUCHITIET: ky hieu goi chi tiet, TENCT = ten chi tiet (CT-01), VITRIBANVE = so hieu to chi tiet.
+BLOCK|GHICHUCHITIET|CHITIET|TENCT|VITRIBANVE
+; 41244 / 1444: ky hieu mat cat tren mat bang - tag 'B' = ten mat cat (A, B), tag 'KT-00' = so hieu to mat cat.
+BLOCK|41244|MATCAT|B|KT-00
+BLOCK|1444|MATCAT|B|KT-00
+; vet cat mat cat (khong attribute, ten mat cat ghi bang TEXT).
+BLOCK|vet cat|MATCAT|
+; GHICHUCUA: dong bang thong ke cua; 1111111111111: ky hieu cua tren MB dinh vi cua (ma cua/kich thuoc/cao do bau).
+BLOCK|GHICHUCUA|CUA|TENCUA
+BLOCK|1111111111111|CUA|S1
+; BLOCK DO DOC 2: ky hieu do doc (i=..%)
+BLOCK|BLOCK \U+0110\U+1ED8 D\U+1ED0C 2|KHAC|BLOCK
+
+; ---------- DANHMUC: so hieu|ten ban ve  (lay tu khung ten, template KHONG co bang danh muc) ----------
+DANHMUC|C/00|T\U+1ED4NG H\U+1EE2P C\U+1EECA
+DANHMUC|C/01|CHI TI\U+1EBET C\U+1EECA
+DANHMUC|C/02|CHI TI\U+1EBET C\U+1EECA
+DANHMUC|C/03|CHI TI\U+1EBET C\U+1EECA
+DANHMUC|C/04|CHI TI\U+1EBET C\U+1EECA
+DANHMUC|C/05|CHI TI\U+1EBET C\U+1EECA
+DANHMUC|C/06|CHI TI\U+1EBET C\U+1EECA
+DANHMUC|C/07|CHI TI\U+1EBET C\U+1EECA
+DANHMUC|CT/01|CHI TI\U+1EBET M\U+1EB6T \U+0110\U+1EE8NG TR\U+1EE4C A-B, B-A
+DANHMUC|CT/02|CHI TI\U+1EBET M\U+1EB6T \U+0110\U+1EE8NG TR\U+1EE4C 1-7
+DANHMUC|CT/03|CHI TI\U+1EBET M\U+1EB6T \U+0110\U+1EE8NG TR\U+1EE4C 7-1
+DANHMUC|CT/04|CHI TI\U+1EBET CT-01
+DANHMUC|CT/05|CHI TI\U+1EBET CT-01
+DANHMUC|CT/06|CHI TI\U+1EBET CT-01
+DANHMUC|CT/07|CHI TI\U+1EBET CT-02
+DANHMUC|CT/08|CHI TI\U+1EBET CT-02
+DANHMUC|CT/09|CHI TI\U+1EBET CT-02
+DANHMUC|CT/10|CHI TI\U+1EBET CT-02
+DANHMUC|CT/11|CHI TI\U+1EBET CT-03
+DANHMUC|CT/12|CHI TI\U+1EBET CT-03
+DANHMUC|CTH/01|CHI TI\U+1EBET CH\U+1ED0NG TH\U+1EA4M
+DANHMUC|CTH/02|M\U+1EB6T B\U+1EB0NG CH\U+1ED0NG TH\U+1EA4M T\U+1EA6NG 1 & T\U+1EA6NG 2
+DANHMUC|CTH/03|M\U+1EB6T B\U+1EB0NG CH\U+1ED0NG TH\U+1EA4M T\U+1EA6NG 3 & T\U+1EA6NG 4
+DANHMUC|CTH/04|M\U+1EB6T B\U+1EB0NG CH\U+1ED0NG TH\U+1EA4M T\U+1EA6NG TUM & T\U+1EA6NG MÁI
+DANHMUC|CTH/05|M\U+1EB6T B\U+1EB0NG CH\U+1ED0NG TH\U+1EA4M \U+0110\U+1EC8NH MÁI
+DANHMUC|\U+0110VC/01|M\U+1EB6T B\U+1EB0NG \U+0110\U+1ECANH V\U+1ECA C\U+1EECA T\U+1EA6NG 1 & T\U+1EA6NG 2
+DANHMUC|\U+0110VC/02|M\U+1EB6T B\U+1EB0NG \U+0110\U+1ECANH V\U+1ECA C\U+1EECA T\U+1EA6NG 3 & T\U+1EA6NG 4
+DANHMUC|\U+0110VC/03|M\U+1EB6T B\U+1EB0NG \U+0110\U+1ECANH V\U+1ECA C\U+1EECA T\U+1EA6NG TUM & T\U+1EA6NG MÁI
+DANHMUC|KT/01|M\U+1EB6T B\U+1EB0NG CÔNG N\U+0102NG T\U+1EA6NG 1 & T\U+1EA6NG 2
+DANHMUC|KT/02|M\U+1EB6T B\U+1EB0NG CÔNG N\U+0102NG T\U+1EA6NG 3 & T\U+1EA6NG 4
+DANHMUC|KT/03|M\U+1EB6T B\U+1EB0NG CÔNG N\U+0102NG T\U+1EA6NG TUM & T\U+1EA6NG MÁI
+DANHMUC|KT/04|M\U+1EB6T B\U+1EB0NG CÔNG N\U+0102NG \U+0110\U+1EC8NH MÁI
+DANHMUC|LS/01|M\U+1EB6T B\U+1EB0NG LÁT SÀN T\U+1EA6NG 1 & T\U+1EA6NG 2
+DANHMUC|LS/02|M\U+1EB6T B\U+1EB0NG LÁT SÀN T\U+1EA6NG 3 & T\U+1EA6NG 4
+DANHMUC|LS/03|M\U+1EB6T B\U+1EB0NG LÁT SÀN T\U+1EA6NG TUM & T\U+1EA6NG MÁI
+DANHMUC|LS/04|M\U+1EB6T B\U+1EB0NG LÁT SÀN \U+0110\U+1EC8NH MÁI
+DANHMUC|MC/01|GHI CHÚ M\U+1EB6T C\U+1EAET
+DANHMUC|MC/02|M\U+1EB6T C\U+1EAET 1-1
+DANHMUC|MC/03|M\U+1EB6T C\U+1EAET 2-2
+DANHMUC|MD/01|M\U+1EB6T \U+0110\U+1EE8NG TR\U+1EE4C A-B, B-A
+DANHMUC|MD/02|M\U+1EB6T \U+0110\U+1EE8NG TR\U+1EE4C 1-7
+DANHMUC|MD/03|M\U+1EB6T \U+0110\U+1EE8NG TR\U+1EE4C 7-1
+DANHMUC|PC/01|PH\U+1ED0I C\U+1EA2NH 1
+DANHMUC|TH/01|CHI TI\U+1EBET THANG B\U+1ED8
+DANHMUC|TH/02|CHI TI\U+1EBET B\U+1EACC THANG
+DANHMUC|TX/01|M\U+1EB6T B\U+1EB0NG T\U+01AF\U+1EDCNG XÂY T\U+1EA6NG 1 & T\U+1EA6NG 2
+DANHMUC|TX/02|M\U+1EB6T B\U+1EB0NG T\U+01AF\U+1EDCNG XÂY T\U+1EA6NG 3 & T\U+1EA6NG 4
+DANHMUC|TX/03|M\U+1EB6T B\U+1EB0NG T\U+01AF\U+1EDCNG XÂY T\U+1EA6NG TUM & T\U+1EA6NG MÁI
+DANHMUC|TX/04|M\U+1EB6T B\U+1EB0NG T\U+01AF\U+1EDCNG XÂY \U+0110\U+1EC8NH MÁI
+DANHMUC|VS/01|CHI TI\U+1EBET WC1
+DANHMUC|VS/02|CHI TI\U+1EBET WC1
+DANHMUC|VS/03|CHI TI\U+1EBET WC1
+DANHMUC|VS/04|CHI TI\U+1EBET WC2
+DANHMUC|VS/05|CHI TI\U+1EBET WC2
+DANHMUC|VS/06|CHI TI\U+1EBET WC2
+DANHMUC|VS/07|CHI TI\U+1EBET WC3
+DANHMUC|VS/08|CHI TI\U+1EBET WC3
+DANHMUC|VS/09|CHI TI\U+1EBET WC3
+DANHMUC|VS/10|CHI TI\U+1EBET WC4
+DANHMUC|VS/11|CHI TI\U+1EBET WC4
+DANHMUC|VS/12|CHI TI\U+1EBET WC4

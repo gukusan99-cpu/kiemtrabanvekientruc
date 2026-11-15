@@ -34,6 +34,8 @@
 (if (not *KT:DLG-FMOD*)  (setq *KT:DLG-FMOD* ""))
 (if (not *KT:DLG-FSP*)   (setq *KT:DLG-FSP* ""))
 (if (not *KT:DLG-PAUSE*) (setq *KT:DLG-PAUSE* "1"))   ; dung lai sau khi zoom (Enter de quay lai)
+(if (not *KT:DLG-SCOPE*) (setq *KT:DLG-SCOPE* "sc_all")) ; pham vi: sc_all toan ban ve / sc_win chon vung
+;; *KT:DLG-LASTSCOPE* : pham vi cua lan KIEM TRA gan nhat (hien o Thong tin)
 ;; *KT:DLG-SEL* : chi so (0-based) trong *KT:ISSUES* dang chon
 ;; *KT:DLG-POS* : vi tri hop thoai (tra ve tu done_dialog)
 ;; *KT:DLG-MSG* : thong bao hien o errtile khi mo lai
@@ -119,6 +121,11 @@
     "          : button { key = \"b_none\"; label = \"Bo chon\"; }"
     "        }"
     "      }"
+    "      : boxed_radio_row {"
+    "        label = \"Pham vi kiem tra\";"
+    "        : radio_button { key = \"sc_all\"; label = \"Toan ban ve\"; }"
+    "        : radio_button { key = \"sc_win\"; label = \"Chon vung (cua so)\"; }"
+    "      }"
     "      : button { key = \"b_run\"; label = \"KIEM TRA\"; is_default = true; }"
     "      : boxed_column {"
     "        label = \"Thong tin\";"
@@ -126,6 +133,7 @@
     "        : text { key = \"i_st\";  width = 46; }"
     "        : text { key = \"i_frm\"; width = 46; }"
     "        : text { key = \"i_res\"; width = 46; }"
+    "        : text { key = \"i_scope\"; width = 46; }"
     "      }"
     "      : boxed_column {"
     "        label = \"Tong hop (module x muc do)\";"
@@ -220,7 +228,8 @@
             (strcat "Ket qua: " (itoa (length *KT:ISSUES*)) " muc  (LOI "
                     (itoa (ktdlg:count 2 "LOI")) ", CANHBAO " (itoa (ktdlg:count 2 "CANHBAO"))
                     ", GOIY " (itoa (ktdlg:count 2 "GOIY")) ")")
-            "Ket qua: chua co (bam KIEM TRA)")))
+            "Ket qua: chua co (bam KIEM TRA)")
+          (strcat "Pham vi lan chay: " (if *KT:DLG-LASTSCOPE* *KT:DLG-LASTSCOPE* "-"))))
 )
 
 ;;; ---------- Dien du lieu vao hop thoai ----------
@@ -437,6 +446,8 @@
     "3. Loc theo Muc do / Module / Khong gian. Double-click hoac 'Xem' de zoom toi loi;\n"
     "   'Loi truoc' / 'Loi sau' di theo danh sach da loc. Hop thoai tu mo lai.\n"
     "   'Dung lai sau khi zoom': CAD cho Enter truoc khi mo lai hop thoai.\n"
+    "   Pham vi 'Chon vung': sau KIEM TRA chon 2 goc cua so -> chi bao loi trong vung\n"
+    "   (van doc ca ban ve de so khop giua cac ban ve).\n"
     "4. 'Xuat CSV' -> <tenbanve>_KiemTra.csv (mo bang Excel). 'Xoa danh dau' xoa\n"
     "   vong tron tren layer KT_CHECK va danh sach loi.\n\n"
     "Muc do: LOI (do) phai sua / CANHBAO (vang) nen xem / GOIY (xanh) tham khao.\n"
@@ -450,6 +461,8 @@
   (set_tile "i_st"  (nth 1 *KT:DLG-INFO*))
   (set_tile "i_frm" (nth 2 *KT:DLG-INFO*))
   (set_tile "i_res" (nth 3 *KT:DLG-INFO*))
+  (set_tile "i_scope" (nth 4 *KT:DLG-INFO*))
+  (set_tile (if (= *KT:DLG-SCOPE* "sc_win") "sc_win" "sc_all") "1")
   (set_tile "o_pause" *KT:DLG-PAUSE*)
   (ktdlg:fill-sum)
   (ktdlg:fill-filters)
@@ -458,6 +471,8 @@
   (action_tile "b_all"  "(ktdlg:set-all \"1\")")
   (action_tile "b_none" "(ktdlg:set-all \"0\")")
   (action_tile "b_run"  "(ktdlg:on-run)")
+  (action_tile "sc_all" "(setq *KT:DLG-SCOPE* $key)")
+  (action_tile "sc_win" "(setq *KT:DLG-SCOPE* $key)")
   (action_tile "f_sev"  "(ktdlg:on-filter \"SEV\" $value)")
   (action_tile "f_mod"  "(ktdlg:on-filter \"MOD\" $value)")
   (action_tile "f_sp"   "(ktdlg:on-filter \"SP\" $value)")
@@ -499,7 +514,9 @@
     (setq i (1+ i)))
   (if (ktdlg:defined 'ktall:summary) (ktall:summary))
   (setq *KT:DLG-SEL* (if *KT:ISSUES* 0)
+        *KT:DLG-LASTSCOPE* (kt:region-str)
         *KT:DLG-MSG* (strcat "Da chay " (itoa nrun) " module - " (itoa (length *KT:ISSUES*)) " muc."
+                             (if *KT:REGION* (strcat " Pham vi: " (kt:region-str)) "")
                              (if failed (strcat " Module loi: " (kt:join (reverse failed) ", ")) "")))
 )
 
@@ -533,6 +550,7 @@
   (defun *error* (m)
     (if (and id (ktdlg:defined 'unload_dialog)) (vl-catch-all-apply 'unload_dialog (list id)))
     (ktdlg:delete *KT:DLG-FILE*)
+    (if (ktdlg:defined 'kt:region-clear) (kt:region-clear))
     (if (not (wcmatch (strcase (kt:str m)) "*CANCEL*,*QUIT*,*EXIT*,*BREAK*"))
       (princ (strcat "\n[KT] Loi: " (kt:str m))))
     (princ))
@@ -557,7 +575,12 @@
            (ktdlg:init)
            (setq st (start_dialog))
            (cond
-             ((= st 2) (ktdlg:run))
+             ((= st 2)
+              (kt:region-clear)
+              (cond ((/= *KT:DLG-SCOPE* "sc_win") (ktdlg:run))
+                    ((kt:ask-window) (ktdlg:run))
+                    (T (setq *KT:DLG-MSG* "Da huy chon vung - khong chay kiem tra.")))
+              (kt:region-clear))
              ((= st 3) (ktdlg:goto *KT:DLG-GO*))
              ((= st 5)
               (c:KTX)

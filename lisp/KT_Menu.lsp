@@ -1,7 +1,7 @@
 ;;; ============================================================
 ;;; KT_Menu.lsp  -  Lenh KTALL (chay tat ca kiem tra) va KTHELP
 ;;; ------------------------------------------------------------
-;;; KTALL : goi lan luot ham run cua cac module DA NAP (module chua nap -> bo qua),
+;;; KTALL : hoi pham vi [Toan ban ve/Vung] (kt:ask-scope), roi goi lan luot ham run cua cac module DA NAP (module chua nap -> bo qua),
 ;;;         moi ham boc vl-catch-all-apply (1 module loi khong dung ca lenh).
 ;;;         Moi ham run tu goi kt:begin / kt:finish cua rieng no.
 ;;;         Cuoi cung in bang tong hop: module x muc do (LOI/CANHBAO/GOIY).
@@ -70,36 +70,51 @@
   (length *KT:ISSUES*)
 )
 
-(defun c:KTALL (/ sym r nRun skipped failed)
-  (princ "\n=== KTALL: chay tat ca kiem tra ===")
-  (if (not (member (type kt:cfg-ok) '(SUBR USUBR)))
-    (princ "\n[KTALL] Chua nap KT_Core.lsp. Hay nap KT_Load.lsp truoc.")
-    (progn
-      (if (not (kt:cfg-ok))
-        (princ "\n[KTALL] CANH BAO: chua co file chuan cong ty - cac module se bo qua phan so voi chuan."))
-      (setq nRun 0)
-      (foreach it *KT:RUNS*
-        (setq sym (car it))
-        (if (ktall:defined sym)
+(defun ktall:run (/ sym r nRun skipped failed)
+  ;; chay moi module da nap (pham vi theo *KT:REGION* hien tai) + bang tong hop
+  (if (not (kt:cfg-ok))
+    (princ "\n[KTALL] CANH BAO: chua co file chuan cong ty - cac module se bo qua phan so voi chuan."))
+  (setq nRun 0)
+  (foreach it *KT:RUNS*
+    (setq sym (car it))
+    (if (ktall:defined sym)
+      (progn
+        (princ (strcat "\n\n>>> " (cadr it)))
+        (setq r (vl-catch-all-apply sym nil))
+        (if (vl-catch-all-error-p r)
           (progn
-            (princ (strcat "\n\n>>> " (cadr it)))
-            (setq r (vl-catch-all-apply sym nil))
-            (if (vl-catch-all-error-p r)
-              (progn
-                (if (wcmatch (strcase (vl-catch-all-error-message r)) "*CANCEL*,*QUIT*,*EXIT*")
-                  (exit))
-                (setq failed (cons (strcat (kt:str sym) ": " (vl-catch-all-error-message r)) failed))
-                (princ (strcat "\n[KTALL] Module loi, bo qua: " (car failed))))
-              (setq nRun (1+ nRun))))
-          (setq skipped (cons (kt:str sym) skipped))))
-      (if skipped
-        (princ (strcat "\n\n[KTALL] Module chua nap (bo qua): " (kt:join (reverse skipped) ", "))))
-      (if failed
-        (progn
-          (princ "\n[KTALL] Module bi loi khi chay:")
-          (foreach x (reverse failed) (princ (strcat "\n   - " x)))))
-      (princ (strcat "\n[KTALL] Da chay " (itoa nRun) " module."))
-      (ktall:summary)))
+            (if (wcmatch (strcase (vl-catch-all-error-message r)) "*CANCEL*,*QUIT*,*EXIT*")
+              (exit))
+            (setq failed (cons (strcat (kt:str sym) ": " (vl-catch-all-error-message r)) failed))
+            (princ (strcat "\n[KTALL] Module loi, bo qua: " (car failed))))
+          (setq nRun (1+ nRun))))
+      (setq skipped (cons (kt:str sym) skipped))))
+  (if skipped
+    (princ (strcat "\n\n[KTALL] Module chua nap (bo qua): " (kt:join (reverse skipped) ", "))))
+  (if failed
+    (progn
+      (princ "\n[KTALL] Module bi loi khi chay:")
+      (foreach x (reverse failed) (princ (strcat "\n   - " x)))))
+  (princ (strcat "\n[KTALL] Da chay " (itoa nRun) " module."
+                 (if *KT:REGION* (strcat " Pham vi: " (kt:region-str)) "")))
+  (ktall:summary)
+)
+
+(defun c:KTALL (/ r)
+  (princ "\n=== KTALL: chay tat ca kiem tra ===")
+  (cond
+    ((not (member (type kt:cfg-ok) '(SUBR USUBR)))
+     (princ "\n[KTALL] Chua nap KT_Core.lsp. Hay nap KT_Load.lsp truoc."))
+    ;; pham vi: toan ban ve / vung (1 vung cho moi module); ESC -> khong chay
+    ((and (ktall:defined 'kt:ask-scope) (not (kt:ask-scope)))
+     (princ "\n[KTALL] Khong chay kiem tra."))
+    (T
+     (setq r (vl-catch-all-apply 'ktall:run nil))
+     (if (ktall:defined 'kt:region-clear) (kt:region-clear))
+     (if (vl-catch-all-error-p r)
+       (if (wcmatch (strcase (vl-catch-all-error-message r)) "*CANCEL*,*QUIT*,*EXIT*")
+         (exit)
+         (princ (strcat "\n[KTALL] Loi: " (vl-catch-all-error-message r)))))))
   (princ)
 )
 

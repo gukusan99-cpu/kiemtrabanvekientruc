@@ -17,6 +17,11 @@ kt_main : dialog {
           : button { key = "b_none"; label = "Bo chon"; }
         }
       }
+      : boxed_radio_row {
+        label = "Pham vi kiem tra";
+        : radio_button { key = "sc_all"; label = "Toan ban ve"; }
+        : radio_button { key = "sc_win"; label = "Chon vung (cua so)"; }
+      }
       : button { key = "b_run"; label = "KIEM TRA"; is_default = true; }
       : boxed_column {
         label = "Thong tin";
@@ -24,6 +29,7 @@ kt_main : dialog {
         : text { key = "i_st";  width = 46; }
         : text { key = "i_frm"; width = 46; }
         : text { key = "i_res"; width = 46; }
+        : text { key = "i_scope"; width = 46; }
       }
       : boxed_column {
         label = "Tong hop (module x muc do)";

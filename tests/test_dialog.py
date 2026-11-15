@@ -59,7 +59,7 @@ class T1_DclFile(unittest.TestCase):
         for k in ("m_lay", "m_txt", "m_dim", "m_sh", "m_mat", "m_cl", "b_all", "b_none", "b_run",
                   "i_cfg", "i_st", "i_frm", "i_res", "l_sum", "f_sev", "f_mod", "f_sp", "l_res",
                   "b_view", "b_prev", "b_next", "b_csv", "b_clr", "b_mau", "b_cfg", "b_open",
-                  "b_help", "cancel", "error", "o_pause"):
+                  "b_help", "cancel", "error", "o_pause", "sc_all", "sc_win", "i_scope"):
             self.assertIn(k, keys)
         self.assertEqual(keys["l_res"].attrs.get("fixed_width_font"), "true")
         ver = s.I.getv("*KT:VER*")
@@ -126,6 +126,9 @@ class T2_Flow(unittest.TestCase):
         self.assertIn("Chua co ket qua", sh[0]["tiles"]["t_note"])
         self.assertEqual(sh[0]["modes"]["b_view"], 1)
         self.assertIn("DA NAP", sh[0]["tiles"]["i_st"])
+        self.assertEqual(sh[0]["tiles"]["o_pause"], "1")                  # dung lai sau zoom: mac dinh BAT
+        self.assertEqual(sh[0]["tiles"]["sc_all"], "1")                   # pham vi mac dinh: toan ban ve
+        self.assertIn("Toan ban ve", sh[2]["tiles"]["i_scope"])
         self.assertRegex(sh[0]["tiles"]["i_frm"], r"Khung ten tim thay: [1-9]")
         self.assertIn("Chua chon module", sh[1]["tiles"]["error"])
         # sau khi kiem tra: DIM khong chay (da bo chon)

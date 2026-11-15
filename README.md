@@ -50,7 +50,9 @@ chỉ cần các file `.lsp`):
 | (dong thong bao)                                                                                |
 +-----------------------------------------------------------------------------------------------+
 ```
-- Tick module → **KIEM TRA** (hộp thoại tạm đóng trong lúc chạy rồi tự mở lại với kết quả).
+- Tick module, chọn **Pham vi kiem tra**: *Toan ban ve* (mặc định) hoặc *Chon vung (cua so)* →
+  **KIEM TRA** (hộp thoại tạm đóng trong lúc chạy – với *Chon vung* thì chọn 2 góc cửa sổ – rồi tự mở
+  lại với kết quả; dòng *Pham vi lan chay* trong khung Thong tin cho biết vùng đã dùng).
 - Lọc theo mức độ / module / không gian; **double-click** hoặc **Xem** → zoom tới lỗi; **Loi truoc /
   Loi sau** đi theo danh sách đã lọc. Hộp thoại đóng – zoom – mở lại, giữ nguyên lựa chọn, bộ lọc và
   dòng đang chọn (DCL không cho zoom khi đang mở). Tick *Dung lai sau khi zoom*: CAD chờ Enter rồi mới mở lại.
@@ -59,7 +61,15 @@ chỉ cần các file `.lsp`):
   **Nap lai chuan** = `KTCFG`.
 - Nếu CAD không mở được hộp thoại DCL, `KT` tự chuyển sang dòng lệnh: hỏi chạy `KTALL`, xem lỗi bằng `KTN`/`KTP`.
 
-### 3.2 Lệnh dòng lệnh
+### 3.2 Phạm vi kiểm tra (toàn bản vẽ / vùng)
+`KTALL` (và các lệnh được nối qua `kt:cmd`) hỏi `Pham vi kiem tra [Toan ban ve/Vung] <Toan ban ve>:`
+– Enter = cả bản vẽ; `V` (hoặc `W`) → chọn 2 góc cửa sổ trong không gian hiện tại (Model hoặc layout;
+đang ở trong viewport thì là toạ độ Model). Khi có vùng, tool **vẫn đọc cả bản vẽ** (so khớp giữa các
+bản vẽ vẫn đúng) nhưng **chỉ báo lỗi có vị trí nằm trong vùng**; lỗi ngoài vùng và lỗi chung của bản vẽ
+bị bỏ, số lượng in ở dòng `(chi bao loi trong vung chon: N muc ngoai vung da bo qua)`. Vùng được vẽ
+khung chữ nhật xanh lá trên layer `KT_CHECK` và chỉ áp dụng cho lần chạy đó. ESC tại câu hỏi → không chạy.
+
+### 3.3 Lệnh dòng lệnh
 | Lệnh | Kiểm tra |
 |---|---|
 | `KTALL` | Chạy tất cả, in bảng tổng hợp |

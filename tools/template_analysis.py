@@ -219,7 +219,7 @@ class Template:
             # scale thuc cua moi lan chen phai la ty le "tron" (>= 1)
             scs = [abs(e.dxf.xscale) * fac for e in ins]
             if scs and all(s >= 1 and abs(s - round(s)) < 0.01 for s in scs):
-                self.extra[name] = round(fac, 4)
+                self.extra[name] = round(fac) if abs(fac - round(fac)) < 0.01 else round(fac, 4)
         self.frames = []
         tg = self.tag_guess()
         for e in self.msp.query("INSERT"):
@@ -606,7 +606,7 @@ def emit_cfg(T, path):
             continue
         f = T.frame_at(e.dxf.insert)
         if f and e.dxf.style in keep_ts and f["kind"] != "BIA" and abs(f["scale"] - 35) > 0.5:
-            th[round(ent_h(e) / f["scale"], 1)] += 1
+            th[round(ent_h(e) / f["scale"] * 20) / 20.0] += 1
     hs = sorted(h for h, n in th.items() if n >= 10)
     dh = collections.Counter(round(r["hp"], 2) for r in rows if r["hp"] and is_company_dimstyle(r["style"])
                              and abs(r["frame"]["scale"] - 35) > 0.5)
@@ -695,8 +695,14 @@ def emit_cfg(T, path):
     A("KHUNG|%s|%s|%s+%s|%s|%s%s" % (L(T.main), tg["SO"], tg["TEN"], tg["TEN2"], tg["TL"], fmt(T.main_fac),
                                     "".join("|" + o for o in others)))
     for n, fac in T.extra.items():
-        A("; %s: to bia hang muc (khong attribute) cung kho A3; scale X 1.852 x %s = 1/100." % (n, fmt(fac, 2)))
-        A("KHUNG|%s||||%s" % (L(n), fmt(fac, 4)))
+        etags = [a.dxf.tag.upper() for a in doc.blocks[n].query("ATTDEF")]
+        if tg["SO"] in etags and tg["TEN"] in etags:
+            A("; %s: khung cung mau (them NGAY/NGUOI THIET KE/HO SO), dung cho to PHOI CANH PC/01." % n)
+            A("KHUNG|%s|%s|%s+%s|%s|%s%s" % (L(n), tg["SO"], tg["TEN"], tg["TEN2"], tg["TL"], fmt(fac),
+                                            "".join("|" + o for o in etags if o not in (tg["SO"], tg["TEN"], tg["TL"], tg["TEN2"]))))
+        else:
+            A("; %s: to bia hang muc (khong attribute) cung kho A3; scale X 1.852 x %s = 1/100." % (n, fmt(fac, 2)))
+            A("KHUNG|%s||||%s" % (L(n), fmt(fac, 4)))
     A("")
     # ---------------- BLOCK
     A("; ---------- BLOCK: ten|vai tro|tag chinh|tag phu (so ban ve tham chieu)|diem goc x,y ----------")
@@ -711,7 +717,10 @@ def emit_cfg(T, path):
     A("BLOCK|KI HIEU CODE MB|CAODO|+0.000||%s,%s" % (fmt(ref2[0], 2), fmt(ref2[1], 2)))
     A("; GHICHUCHITIET: ky hieu goi chi tiet, TENCT = ten chi tiet (CT-01), VITRIBANVE = so hieu to chi tiet.")
     A("BLOCK|GHICHUCHITIET|CHITIET|TENCT|VITRIBANVE")
-    A("; vet cat: ky hieu vet cat mat cat (khong attribute, ten mat cat ghi bang TEXT).")
+    A("; 41244 / 1444: ky hieu mat cat tren mat bang - tag 'B' = ten mat cat (A, B), tag 'KT-00' = so hieu to mat cat.")
+    A("BLOCK|41244|MATCAT|B|KT-00")
+    A("BLOCK|1444|MATCAT|B|KT-00")
+    A("; vet cat mat cat (khong attribute, ten mat cat ghi bang TEXT).")
     A("BLOCK|vet cat|MATCAT|")
     A("; GHICHUCUA: dong bang thong ke cua; 1111111111111: ky hieu cua tren MB dinh vi cua (ma cua/kich thuoc/cao do bau).")
     A("BLOCK|GHICHUCUA|CUA|TENCUA")

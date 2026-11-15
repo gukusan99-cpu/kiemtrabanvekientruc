@@ -445,9 +445,23 @@
   (reverse res)
 )
 
-(defun kt:attval (en tag)
+(defun kt:attval (en tag / atts res v)
+  ;; gia tri attribute theo tag. tag "A+B" (vd "TEN_BAN_VE+TEN_CONG_TRINH" - ten ban ve 2 dong):
+  ;; noi cac gia tri khac rong bang dau cach; nil neu moi tag deu khong co
   (if (and (= (type tag) 'STR) (/= tag ""))
-    (cdr (assoc (strcase tag) (kt:attribs en))))
+    (if (vl-string-search "+" tag)
+      (progn
+        (setq atts (kt:attribs en))
+        (foreach tg (kt:split tag "+")
+          (if (and (/= tg "") (setq v (assoc (strcase tg) atts)))
+            (setq res (cons (cdr v) res))))
+        (if res (kt:join (vl-remove "" (reverse res)) " ")))
+      (cdr (assoc (strcase tag) (kt:attribs en)))))
+)
+
+(defun kt:tag1 (tag)
+  ;; tag chinh cua truong "A+B" -> "A" (HOA); "" neu rong
+  (strcase (cond ((car (kt:split (kt:str tag) "+"))) ("")))
 )
 
 ;;; ---------- File chuan cong ty ----------
@@ -519,13 +533,52 @@
   (mapcar '(lambda (r) (strcase (kt:str (car r)))) (kt:cfg sec))
 )
 
-(defun kt:cfg-row (sec name / up)
-  ;; dong dau tien cua muc sec co truong 1 = name (khong phan biet hoa thuong)
+;;; --- khoa so sanh ten (layer/block/style co dau tieng Viet) ---
+;;; strcase chi doi a-z: "TR\U+1EE5C" (tru.c thuong) khac "TR\U+1EE4C"; AutoLISP Unicode (LISPSYS=1)
+;;; thay ky tu that thay vi "\U+XXXX". kt:ukey dua moi dang ve 1 khoa: HOA (ca chu Viet co dau),
+;;; ma > 255 -> "\U+XXXX" (hex HOA), ma <= 255 giu 1 byte (codepage ban ve).
+(defun kt:hex4 (n / s d)
+  (setq s "")
+  (repeat 4
+    (setq d (rem n 16) s (strcat (substr "0123456789ABCDEF" (1+ d) 1) s) n (/ n 16)))
+  s
+)
+
+(defun kt:uup (c)
+  ;; ma ky tu -> ma chu HOA (ASCII, Latin-1, chu Viet U+1EA0-1EF9, a( d- i~ u~ o+ u+)
+  (cond ((and (>= c 97) (<= c 122)) (- c 32))
+        ((and (>= c 224) (<= c 254) (/= c 247)) (- c 32))
+        ((and (>= c 7840) (<= c 7929) (= 1 (rem c 2))) (1- c))
+        ((member c '(259 273 297 361 417 432)) (1- c))
+        (T c))
+)
+
+(defun kt:ukey (s / i n c h res)
+  (setq s (kt:str s) i 1 n (strlen s) res "")
+  (while (<= i n)
+    (if (and (<= (+ i 6) n) (= (strcase (substr s i 3)) "\\U+")
+             (setq h (kt:hex (substr s (+ i 3) 4))))
+      (setq c h i (+ i 7))
+      (setq c (ascii (substr s i 1)) i (1+ i)))
+    (setq c (kt:uup c)
+          res (strcat res (if (> c 255) (strcat "\\U+" (kt:hex4 c)) (chr c)))))
+  res
+)
+
+(defun kt:cfg-keys (sec)
+  ;; nhu kt:cfg-names nhung la khoa kt:ukey (dung voi (member (kt:ukey ten) ...))
+  (mapcar '(lambda (r) (kt:ukey (car r))) (kt:cfg sec))
+)
+
+(defun kt:cfg-row (sec name / up uk)
+  ;; dong dau tien cua muc sec co truong 1 = name (khong phan biet hoa thuong, ca chu co dau)
   (if (= (type name) 'STR)
     (progn
       (setq up (strcase name))
       (car (vl-member-if
-             '(lambda (r) (and (= (type (car r)) 'STR) (= (strcase (car r)) up)))
+             '(lambda (r) (and (= (type (car r)) 'STR)
+                               (or (= (strcase (car r)) up)
+                                   (= (kt:ukey (car r)) (cond (uk) ((setq uk (kt:ukey name))))))))
              (kt:cfg sec)))))
 )
 
@@ -713,7 +766,7 @@
   ;; goi dau moi lenh kiem tra: xoa loi cu cua module do
   (kt:reset-cache)
   (setq *KT:REDRAW* (kt:clear-module module))
-  (setq *KT:PEND* nil *KT:CNT* nil
+  (setq *KT:PEND* nil *KT:CNT* nil *KT:REGION-SKIP* 0
         *KT:CAP* (max 1 (fix (kt:cfg-num "MAX_LOI_MOI_MA" 300))))
 )
 
@@ -731,13 +784,105 @@
       (setq e0 (if (and (car ens) (entget (car ens))) (car ens)))
       (setq sp (if e0 (kt:space (entget e0)) (kt:cur-space)))
       (if (and (null pt) e0) (setq pt (kt:cen e0)))
-      (if pt
+      (if (not (kt:region-p pt sp))
+        ;; dang gioi han vung kiem tra: loi ngoai vung / loi chung (khong vi tri) -> bo qua
+        (setq *KT:CNT* (subst (cons key (1- c)) (assoc key *KT:CNT*) *KT:CNT*)
+              *KT:REGION-SKIP* (1+ (cond (*KT:REGION-SKIP*) (0))))
         (progn
-          (setq pt (kt:2d pt) d (kt:defrad pt sp))
-          (if (or (not (numberp r)) (<= r 0))
-            (setq r (if e0 (min (max (* 0.6 (kt:boxsize e0)) d) (* 20.0 d)) d)))))
-      (setq *KT:PEND* (cons (list module code (kt:str sev) (kt:str msg) ens pt r sp) *KT:PEND*))))
+          (if pt
+            (progn
+              (setq pt (kt:2d pt) d (kt:defrad pt sp))
+              (if (or (not (numberp r)) (<= r 0))
+                (setq r (if e0 (min (max (* 0.6 (kt:boxsize e0)) d) (* 20.0 d)) d)))))
+          (setq *KT:PEND* (cons (list module code (kt:str sev) (kt:str msg) ens pt r sp) *KT:PEND*))))))
   c
+)
+
+;;; ---------- Vung kiem tra (pham vi) ----------
+;;; *KT:REGION* = nil (toan ban ve) hoac (khonggian minpt maxpt), diem 2D da chuan hoa.
+;;; Chi anh huong kt:add (loi ngoai vung bi bo, dem vao *KT:REGION-SKIP*); cac module van
+;;; doc TOAN ban ve (kiem tra cheo giua cac ban ve van dung). Lenh cap cao tu xoa vung sau khi chay.
+(defun kt:region-set (space p1 p2)
+  (setq *KT:REGION*
+         (list (kt:str space)
+               (list (min (car p1) (car p2)) (min (cadr p1) (cadr p2)))
+               (list (max (car p1) (car p2)) (max (cadr p1) (cadr p2))))
+        *KT:REGION-SKIP* 0)
+)
+
+(defun kt:region-clear () (setq *KT:REGION* nil *KT:REGION-SKIP* 0))
+
+(defun kt:region-p (pt space)
+  ;; T neu khong gioi han vung, hoac pt nam trong vung va cung khong gian
+  (cond ((null *KT:REGION*) T)
+        ((null pt) nil)
+        ((/= (kt:str space) (car *KT:REGION*)) nil)
+        (T (kt:inbox (kt:2d pt) (cadr *KT:REGION*) (caddr *KT:REGION*))))
+)
+
+(defun kt:region-str ()
+  (if *KT:REGION*
+    (strcat "Vung (" (car *KT:REGION*) ") "
+            (rtos (car (cadr *KT:REGION*)) 2 0) "," (rtos (cadr (cadr *KT:REGION*)) 2 0) " - "
+            (rtos (car (caddr *KT:REGION*)) 2 0) "," (rtos (cadr (caddr *KT:REGION*)) 2 0))
+    "Toan ban ve")
+)
+
+(defun kt:region-mark (/ mn mx sp)
+  ;; khung chu nhat mau 3 (xanh la) quanh vung tren layer KT_CHECK (thay khung cu)
+  (if (and *KT:REGION-ENT* (entget *KT:REGION-ENT*)) (entdel *KT:REGION-ENT*))
+  (setq *KT:REGION-ENT* nil)
+  (if *KT:REGION*
+    (progn
+      (setq sp (car *KT:REGION*) mn (cadr *KT:REGION*) mx (caddr *KT:REGION*))
+      (if (entmake (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") (cons 8 *KT:LAYER*)
+                                 '(62 . 3))
+                           (if (= sp "Model") nil (list '(67 . 1)))
+                           (list (cons 410 sp) '(100 . "AcDbPolyline") '(90 . 4) '(70 . 1)
+                                 (cons 10 mn) (cons 10 (list (car mx) (cadr mn)))
+                                 (cons 10 mx) (cons 10 (list (car mn) (cadr mx))))))
+        (setq *KT:REGION-ENT* (entlast)))))
+)
+
+(defun kt:ask-window (/ r p1 p2 sp)
+  ;; hoi 2 goc cua so trong khong gian hien tai -> kt:region-set; nil neu ESC / Enter
+  ;; dang o trong viewport cua layout -> toa do la cua Model
+  (setq sp (if (and (= 0 (getvar "TILEMODE")) (/= 1 (getvar "CVPORT"))) "Model" (kt:cur-space)))
+  (setq r (vl-catch-all-apply 'getpoint (list "\nGoc thu nhat cua vung kiem tra: ")))
+  (if (and r (not (vl-catch-all-error-p r)))
+    (progn
+      (setq p1 r r (vl-catch-all-apply 'getcorner (list p1 "\nGoc doi dien: ")))
+      (if (and r (not (vl-catch-all-error-p r)))
+        (progn
+          (setq p2 r)
+          (kt:region-set sp (trans p1 1 0) (trans p2 1 0))
+          (princ (strcat "\n[KT] Chi bao loi trong " (kt:region-str)))
+          T)
+        (progn (princ "\n[KT] Huy chon vung.") nil)))
+    (progn (princ "\n[KT] Huy chon vung.") nil))
+)
+
+(defun kt:ask-scope (/ k)
+  ;; "[Toan ban ve/Vung]": T de chay tiep (vung da dat neu chon Vung), nil neu ESC
+  (kt:region-clear)
+  (initget "Toan Vung All Window")
+  (setq k (vl-catch-all-apply 'getkword (list "\nPham vi kiem tra [Toan ban ve/Vung] <Toan ban ve>: ")))
+  (cond ((vl-catch-all-error-p k) (princ "\n[KT] Huy.") nil)
+        ((member k '("Vung" "Window")) (kt:ask-window))
+        (T T))
+)
+
+(defun kt:cmd (fn / r)
+  ;; boc lenh kiem tra: hoi pham vi -> chay fn -> xoa vung (ke ca khi fn loi)
+  (if (kt:ask-scope)
+    (progn
+      (setq r (vl-catch-all-apply fn nil))
+      (kt:region-clear)
+      (if (vl-catch-all-error-p r)
+        (if (wcmatch (strcase (vl-catch-all-error-message r)) "*CANCEL*,*QUIT*,*EXIT*")
+          (exit)
+          (princ (strcat "\n[KT] Loi: " (vl-catch-all-error-message r)))))))
+  (princ)
 )
 
 (defun kt:defrad (pt sp / sc ds)
@@ -814,15 +959,20 @@
   ;; chi ve lai toan bo khi loi cu cua module nay bi thay hoac danh dau bi xoa/undo;
   ;; nguoc lai chi ve them loi moi (KTALL tren ban ve lon nhanh hon nhieu)
   (setq nold (* 2 (length (vl-remove-if-not '(lambda (x) (nth 5 x)) *KT:ISSUES*))))
+  (if (and *KT:REGION-ENT* (entget *KT:REGION-ENT*)) (setq nold (1+ nold)))   ; khung vung
   (setq *KT:ISSUES* (append *KT:ISSUES* new))
-  (if *KT:ISSUES* (kt:mklayer))
+  (if (or *KT:ISSUES* *KT:REGION*) (kt:mklayer))
   (if (or *KT:REDRAW* (/= nold (kt:nmarks)))
     (progn (kt:clear-marks) (foreach x *KT:ISSUES* (kt:mark x)))
     (foreach x new (kt:mark x)))
+  (if *KT:REGION* (kt:region-mark))
   (setq *KT:REDRAW* nil)
   (if doc (vl-catch-all-apply 'vla-EndUndoMark (list doc)))
   (setq lst new)
   (princ (strcat "\n=== [" module "] phat hien " (itoa (length lst)) " muc ==="))
+  (if *KT:REGION*
+    (princ (strcat "\n  (chi bao loi trong vung chon: " (itoa (cond (*KT:REGION-SKIP*) (0)))
+                   " muc ngoai vung da bo qua)")))
   (foreach x lst (if (not (member (cadr x) codes)) (setq codes (cons (cadr x) codes))))
   (foreach k (reverse codes)
     (setq n (cond ((cdr (assoc (strcat module ":" k) *KT:CNT*))) (0)))
@@ -893,7 +1043,7 @@
 
 (defun c:KTX ()
   (kt:clear-marks)
-  (setq *KT:ISSUES* nil *KT:IDX* -1 *KT:PEND* nil)
+  (setq *KT:ISSUES* nil *KT:IDX* -1 *KT:PEND* nil *KT:REGION-ENT* nil)
   (princ "\n[KT] Da xoa danh dau va danh sach loi.")
   (princ)
 )
