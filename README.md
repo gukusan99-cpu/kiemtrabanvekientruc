@@ -20,6 +20,46 @@ mọi đánh dấu nằm trên layer riêng `KT_CHECK` (xóa bằng `KTX`).
    Tham khảo `KT_ChuanCongTy.mau.txt` để biết ý nghĩa từng dòng.
 
 ## 3. Kiểm tra bản vẽ nhân viên
+### 3.1 Hộp thoại tổng hợp – lệnh `KT` (hoặc `KTDLG`)
+Gõ `KT` để mở hộp thoại gom toàn bộ bộ lisp (AutoCAD và VinaCAD, DCL cơ bản, file `.dcl` tự sinh –
+chỉ cần các file `.lsp`):
+
+```
++-- KIEM TRA HO SO BAN VE - KT v1.1 ----------------------------------------------------------+
+| +- Module kiem tra --------------+  Muc do:[Tat ca v]  Module:[Tat ca v]  Khong gian:[Tat ca v] |
+| | [x] Layer / mau / linetype      |  +- Ket qua (double-click hoac Xem de zoom toi loi) -------+ |
+| | [x] Chu / textstyle / font      |  |  STT  MUC      MODULE MA                NOI DUNG        | |
+| | [x] Kich thuoc / dimstyle       |  |    1  LOI      LAYER  LAYER-LA          Layer 'ABC-LA'..| |
+| | [x] Khung ten / so hieu / DM    |  |    2  LOI      LAYER  LAYER-0           CIRCLE ve tren..| |
+| | [x] Khop ban ve: truc/cao do    |  |    4  CANHBAO  TEXT   TEXT-CAO          TEXT cao 400 .. | |
+| | [x] Lam sach file               |  |   ...                                                   | |
+| | [Chon tat ca]  [Bo chon]        |  +---------------------------------------------------------+ |
+| +---------------------------------+  #2 [LOI] LAYER-LAYER-0: CIRCLE ve tren layer 0 ... @Model  |
+|           [ KIEM TRA ]               [Xem] [<< Loi truoc] [Loi sau >>] [Xuat CSV] [Xoa danh dau] |
+| +- Thong tin ---------------------+  [x] Dung lai sau khi zoom                                 |
+| | File chuan: ...ChuanCongTy.txt  |                                                            |
+| | Trang thai: DA NAP (8 muc)      |                                                            |
+| | Khung ten tim thay: 4           |                                                            |
+| | Ket qua: 11 muc (LOI 5, ...)    |                                                            |
+| +- Tong hop (module x muc do) ----+                                                            |
+| | Module   LOI  CBAO  GOIY  Cong  |                                                            |
+| | LAYER      2     0     1     3  |                                                            |
+| | ...   TONG 5     4     2    11  |                                                            |
+| +---------------------------------+                                                            |
+| [Tao chuan tu ban ve mau...] [Nap lai chuan] [Mo file chuan] [Tro giup] [Dong]                  |
+| (dong thong bao)                                                                                |
++-----------------------------------------------------------------------------------------------+
+```
+- Tick module → **KIEM TRA** (hộp thoại tạm đóng trong lúc chạy rồi tự mở lại với kết quả).
+- Lọc theo mức độ / module / không gian; **double-click** hoặc **Xem** → zoom tới lỗi; **Loi truoc /
+  Loi sau** đi theo danh sách đã lọc. Hộp thoại đóng – zoom – mở lại, giữ nguyên lựa chọn, bộ lọc và
+  dòng đang chọn (DCL không cho zoom khi đang mở). Tick *Dung lai sau khi zoom*: CAD chờ Enter rồi mới mở lại.
+- Danh sách hiện tối đa 500 dòng (xem đủ bằng **Xuat CSV**). Lựa chọn được nhớ trong phiên CAD.
+- **Tao chuan tu ban ve mau** chạy `KTMAU` (hỏi ở dòng lệnh), **Mo file chuan** mở Notepad,
+  **Nap lai chuan** = `KTCFG`.
+- Nếu CAD không mở được hộp thoại DCL, `KT` tự chuyển sang dòng lệnh: hỏi chạy `KTALL`, xem lỗi bằng `KTN`/`KTP`.
+
+### 3.2 Lệnh dòng lệnh
 | Lệnh | Kiểm tra |
 |---|---|
 | `KTALL` | Chạy tất cả, in bảng tổng hợp |
@@ -31,7 +71,7 @@ mọi đánh dấu nằm trên layer riêng `KT_CHECK` (xóa bằng `KTX`).
 | `KTSACH` | Xref/ảnh mất, Z≠0, line/block copy chồng, block/layer rác, hatch không liên kết |
 
 Xem kết quả: `KTN` (lỗi tiếp theo – tự chuyển layout & zoom), `KTP` (lỗi trước), `KTBC` (xuất
-`<tenbanve>_KiemTra.csv` mở bằng Excel), `KTX` (xóa đánh dấu). `KTHELP` liệt kê lệnh.
+`<tenbanve>_KiemTra.csv` mở bằng Excel), `KTX` (xóa đánh dấu). `KTHELP` liệt kê lệnh. `lisp/KT_Dialog.dcl` chỉ là bản tham khảo của file DCL tự sinh.
 
 Mức độ: **LOI** (đỏ) – phải sửa · **CANHBAO** (vàng) – nên xem · **GOIY** (xanh) – tham khảo.
 

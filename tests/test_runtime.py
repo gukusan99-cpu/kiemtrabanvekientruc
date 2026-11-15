@@ -109,7 +109,7 @@ class T1_KTMAU(unittest.TestCase):
     def test_load_suite(self):
         s, lr, r, cfg = mau_cfg()
         self.assertEqual(internal_errors(lr), [], lr.describe_errors())
-        self.assertIn("Da nap 9 file", lr.out)
+        self.assertIn("Da nap 10 file", lr.out)   # 9 + KT_Dialog.lsp
         self.assertNotIn("file LOI", lr.out)
 
     def test_ktmau_runs_clean(self):

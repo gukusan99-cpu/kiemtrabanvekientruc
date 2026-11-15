@@ -19,6 +19,7 @@ Exit code: `0` không có ERROR, `1` có ERROR, `2` lỗi sử dụng (không t�
 | NOT-FUNC, SYNTAX, SETQ-CONST | ERROR | đầu list là số/chuỗi, setq lẻ, `if` thừa nhánh… |
 | ARITY | ERROR | sai số đối số so với defun trong dự án (và một số built-in hay dùng) |
 | DUP-CMD | ERROR | lệnh `c:XXX` định nghĩa trùng |
+| DCL-ACTION | ERROR | chuỗi mã của `action_tile` / `new_dialog` sai cú pháp hoặc gọi `$value`… như hàm. Hàm gọi trong chuỗi cũng được kiểm UNDEF-FUNC/ARITY (`$key $value $reason $data $x $y` là biến DCL) |
 | DUP-DEFUN, REDEF-BUILTIN, DUP-LOCAL | WARN | defun trùng tên / ghi đè built-in / biến khai báo 2 lần |
 | LEAK | WARN | biến được `setq` trong defun mà không khai báo sau `/` (trừ `*TEN*`) |
 | RISKY | WARN | hàm rủi ro trên VinaCAD/IntelliCAD — danh sách `RISKY_FUNCTIONS` ở đầu `lisplint.py` |
@@ -41,3 +42,11 @@ Chỉ thị trong comment của file `.lsp`:
 - Kiểm tra số đối số built-in chỉ có cho danh sách `BUILTIN_ARITY` (hàm thông dụng); `vla-*` không kiểm tra tên/đối số.
 - Kiểm tra rò rỉ chỉ xét `setq`/`(set 'x)`; không phát hiện biến chỉ đọc mà chưa gán, không mô phỏng phạm vi động.
 - Hàm khai báo trùng với số tham số khác nhau thì bỏ qua kiểm tra số đối số.
+
+## tools/lispsim/dcl.py — giả lập DCL
+
+`attach_dcl(session)` cài `load_dialog`/`new_dialog`/`start_dialog`/`action_tile`/`set_tile`/`start_list`…
+vào lispsim: parse file `.dcl` (ngoặc nhọn, `;`, chỉ tile cơ bản, key không trùng), báo `problems` khi
+`set_tile`/`action_tile` dùng key không có hoặc gọi `command`/`get*`/`entmake`/zoom lúc hộp thoại đang mở.
+`dlg.script` = danh sách lần mở hộp thoại, mỗi lần là các bước `(key giá-trị [reason])` / `(key,)` / hàm Python.
+`attach_dcl(s, available=False | fail_load=True | fail_new=True)` mô phỏng CAD không có DCL. Ví dụ: `tests/test_dialog.py`.

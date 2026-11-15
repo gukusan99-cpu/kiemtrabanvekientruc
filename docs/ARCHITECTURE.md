@@ -13,6 +13,8 @@ lisp/
   KT_Match.lsp       KTKHOP  : khớp trục, khớp cao độ, khớp kích thước giữa các bản vẽ
   KT_Clean.lsp       KTSACH  : xref/ảnh mất, Z≠0, đối tượng rác/trùng, block chưa purge
   KT_Menu.lsp        KTALL (chạy tất cả), KTHELP
+  KT_Dialog.lsp      KT/KTDLG: hộp thoại DCL tổng hợp (prefix ktdlg:, .dcl tự sinh lúc chạy;
+                     KT_Dialog.dcl chỉ để tham khảo). Biến phiên *KT:DLG-...*
   KT_ChuanCongTy.txt file chuẩn công ty (sinh bởi KTMAU, sửa tay được)
   legacy/CheckDimOverlap.lsp  lisp CDO gốc (giữ nguyên)
 tools/lisplint.py    kiểm tra tĩnh (bắt buộc sạch ERROR trước khi giao)

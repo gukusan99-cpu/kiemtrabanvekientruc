@@ -5,7 +5,7 @@
 ;;;         moi ham boc vl-catch-all-apply (1 module loi khong dung ca lenh).
 ;;;         Moi ham run tu goi kt:begin / kt:finish cua rieng no.
 ;;;         Cuoi cung in bang tong hop: module x muc do (LOI/CANHBAO/GOIY).
-;;; KTHELP: danh sach lenh.
+;;; KTHELP: danh sach lenh (KT = hop thoai, xem KT_Dialog.lsp).
 ;;; Can KT_Core.lsp.
 ;;; ============================================================
 
@@ -105,7 +105,8 @@
 
 (defun c:KTHELP (/ ok)
   (princ "\n================ BO KIEM TRA BAN VE KT ================")
-  (foreach x '((c:KTMAU   "KTMAU   : trich chuan cong ty tu ban ve mau -> KT_ChuanCongTy.txt")
+  (foreach x '((c:KT      "KT      : MO HOP THOAI tong hop (chon module, kiem tra, loc, xem loi)")
+               (c:KTMAU   "KTMAU   : trich chuan cong ty tu ban ve mau -> KT_ChuanCongTy.txt")
                (c:KTCFG   "KTCFG   : nap lai file chuan cong ty")
                (c:KTALL   "KTALL   : chay tat ca kiem tra + bang tong hop")
                (c:KTLAYER "KTLAYER : kiem tra layer / mau / linetype")

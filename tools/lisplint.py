@@ -167,7 +167,17 @@ BUILTIN_ARITY = {
     "getreal": (0, 1), "getint": (0, 1), "getstring": (0, 2), "getpoint": (0, 2),
     "getdist": (0, 2), "getangle": (0, 2), "getkword": (0, 1), "initget": (0, 2),
     "entsel": (0, 1), "nentsel": (0, 1), "handent": (1, 1), "rem": (1, None),
+    # DCL
+    "load_dialog": (1, 1), "unload_dialog": (1, 1), "new_dialog": (2, 4), "start_dialog": (0, 0),
+    "done_dialog": (0, 1), "term_dialog": (0, 0), "action_tile": (2, 2), "set_tile": (2, 2),
+    "get_tile": (1, 1), "mode_tile": (2, 2), "get_attr": (2, 2), "client_data_tile": (2, 2),
+    "start_list": (1, 3), "add_list": (1, 1), "end_list": (0, 0), "startapp": (1, 2),
 }
+
+# Bien do DCL dat khi chay bieu thuc action_tile (chi hop le BEN TRONG chuoi action)
+DCL_ACTION_VARS = {"$key", "$value", "$reason", "$data", "$x", "$y"}
+# ham ma doi so thu k (0-based) la CHUOI MA LISP se duoc eval (DCL callback)
+CODE_STRING_ARG = {"action_tile": 1, "new_dialog": 2}
 
 ACTIVEX_PREFIXES = ("vla-", "vlax-")
 
@@ -781,6 +791,9 @@ class Project:
 
         # loi goi ham thuong
         self.check_call(name, len(args), head.line, scope)
+        if name in CODE_STRING_ARG and len(args) > CODE_STRING_ARG[name] \
+                and args[CODE_STRING_ARG[name]].kind == "str":
+            self.check_code_string(args[CODE_STRING_ARG[name]], name)
         if name in FUNARG_POS and len(args) > FUNARG_POS[name]:
             pos = FUNARG_POS[name]
             hint = None
@@ -803,6 +816,46 @@ class Project:
                 self.walk(a, scope)
             return
         self.walk_body(args, scope)
+
+    def check_code_string(self, node, fn):
+        """chuoi ma lisp cua action_tile / new_dialog: kiem cu phap + ham chua dinh nghia.
+        Bieu thuc chay o muc toan cuc (khong co bien cuc bo) voi $key $value $reason..."""
+        code = re.sub(r'\\(.)', lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), node.val)
+        if code.strip() == "":
+            return
+        sub = []
+        toks = tokenize(code, self.cur_file, sub, {"extern": set(), "ignore": {}})
+        check_balance(toks, self.cur_file, sub)
+        forms = parse(toks, self.cur_file, sub)
+        if sub:
+            self.add(self.cur_file, node.line, "ERROR", "DCL-ACTION",
+                     "chuoi ma cua %s loi cu phap: %s" % (fn, "; ".join(i.msg for i in sub)))
+            return
+        line0 = node.line - 1
+
+        def shift(nd):
+            nd.line += line0
+            nd.end_line += line0
+            if nd.kind == "list":
+                for it in nd.items:
+                    shift(it)
+            elif nd.kind == "quote":
+                shift(nd.val)
+        for f in forms:
+            shift(f)
+            self.walk(f, None)
+        for f in forms:
+            self._dcl_vars(f)
+
+    def _dcl_vars(self, nd):
+        # goi ($value) nhu ham la sai
+        if nd.kind == "list" and nd.items:
+            h = nd.items[0]
+            if h.kind == "sym" and h.val in DCL_ACTION_VARS:
+                self.add(self.cur_file, h.line, "ERROR", "DCL-ACTION",
+                         "'%s' la bien DCL, khong phai ham" % h.val)
+            for it in nd.items:
+                self._dcl_vars(it)
 
     # ---------------- ket qua ----------------
     def filtered(self, min_level):

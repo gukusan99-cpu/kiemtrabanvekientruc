@@ -9,6 +9,10 @@ from collections import OrderedDict
 POINT_CODES = set(range(10, 19)) | {110, 111, 112, 210, 211, 212, 213, 1010, 1011, 1012, 1013}
 
 
+# doi tuong luu toa do OCS (210 = (0 0 -1) -> lat truc X); MTEXT/ELLIPSE/LINE/DIMENSION la WCS
+OCS_TYPES = {"CIRCLE", "ARC", "LWPOLYLINE", "TEXT", "ATTRIB", "ATTDEF", "INSERT", "HATCH", "SOLID", "TRACE"}
+
+
 class Ent:
     def __init__(self, dwg, etype, data, kind, owner):
         self.dwg = dwg
@@ -197,11 +201,13 @@ class Drawing:
         if space not in self.layouts:
             raise ValueError("chua co layout " + space)
         e = Ent(self, etype, data, "main", space)
+        e._mi = len(self.main)
         self.main.append(e)
         for s in subs or []:
             se = Ent(self, s[0], s[1], "sub", space)
             se.parent = e
             e.subs.append(se)
+            se._mi = len(self.main)
             self.main.append(se)
         return e
 
@@ -349,9 +355,43 @@ class Drawing:
         elif t == "LWPOLYLINE":
             z = e.get(38, 0.0)
             pts = [(p[0], p[1], z) for p in e.gets(10)]
-        elif t in ("CIRCLE", "ARC"):
+        elif t == "CIRCLE":
             c, r = e.get(10), e.get(40, 0.0)
             pts = [(c[0] - r, c[1] - r, c[2]), (c[0] + r, c[1] + r, c[2])]
+        elif t == "ARC":
+            pts = arc_points(e.get(10), e.get(40, 0.0), e.get(50, 0.0), e.get(51, 2 * math.pi))
+        elif t == "ELLIPSE":
+            c, m = e.get(10), e.get(11, (0.0, 0.0, 0.0))
+            ratio = e.get(40, 1.0)
+            t0, t1 = e.get(41, 0.0), e.get(42, 2 * math.pi)
+            nz = (e.get(210) or (0.0, 0.0, 1.0))[2]
+            mn = (-m[1] * ratio, m[0] * ratio) if nz >= 0 else (m[1] * ratio, -m[0] * ratio)
+            while t1 <= t0:
+                t1 += 2 * math.pi
+            n = 64
+            pts = [(c[0] + math.cos(t) * m[0] + math.sin(t) * mn[0], c[1] + math.cos(t) * m[1] + math.sin(t) * mn[1],
+                    c[2]) for t in [t0 + (t1 - t0) * k / n for k in range(n + 1)]]
+        elif t == "HATCH":
+            # bo diem 10 dau (elevation) ; lay dinh/diem bien (10/11) cua cac duong bien
+            pp = []
+            for c_, v in e.data:
+                if c_ == 98:
+                    break           # diem seed
+                if c_ in (10, 11) and isinstance(v, tuple):
+                    pp.append(v)
+            pts = pp[1:] if len(pp) > 1 else []
+        elif t in ("IMAGE", "WIPEOUT"):
+            o, u, v, sz = e.get(10), e.get(11), e.get(12), e.get(13)
+            if o and u and v and sz:
+                pts = [(o[0] + u[0] * i * sz[0] + v[0] * j * sz[1], o[1] + u[1] * i * sz[0] + v[1] * j * sz[1], 0.0)
+                       for i in (0, 1) for j in (0, 1)]
+        elif t == "POLYLINE":
+            pts = [se.get(10) for se in e.subs if se.type == "VERTEX" and se.get(10)]
+        elif t in ("SPLINE", "LEADER", "SOLID", "3DFACE", "TRACE", "MLINE", "POINT", "XLINE", "RAY",
+                   "MULTILEADER"):
+            pts = [v for c_, v in e.data if c_ in (10, 11, 12, 13) and isinstance(v, tuple)]
+            if t in ("XLINE", "RAY"):
+                pts = pts[:1]
         elif t in ("TEXT", "ATTRIB", "ATTDEF"):
             pts = text_corners(e)
         elif t == "MTEXT":
@@ -392,8 +432,21 @@ class Drawing:
         pts = [P(p) for p in pts if p]
         if not pts:
             return None
+        if t in OCS_TYPES:
+            nz = e.get(210)
+            if nz and nz[2] < 0 and abs(nz[0]) < 1e-9 and abs(nz[1]) < 1e-9:
+                pts = [(-p[0], p[1], -p[2]) for p in pts]      # OCS (0 0 -1) -> WCS: x -> -x
         return (tuple(min(p[i] for p in pts) for i in range(3)),
                 tuple(max(p[i] for p in pts) for i in range(3)))
+
+
+def arc_points(c, r, a1, a2):
+    """goc radian (nhu entget)"""
+    while a2 <= a1:
+        a2 += 2 * math.pi
+    angs = [a1, a2] + [k * math.pi / 2 for k in range(-4, 9) if a1 < k * math.pi / 2 < a2]
+    z = c[2] if len(c) > 2 else 0.0
+    return [(c[0] + r * math.cos(a), c[1] + r * math.sin(a), z) for a in angs]
 
 
 def text_size(s, h, wf=1.0):

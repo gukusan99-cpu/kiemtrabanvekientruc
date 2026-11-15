@@ -333,6 +333,50 @@ class TestNonAscii(Base):
         self.assertEqual([i.line for i in self.find(iss, "NON-ASCII", "WARN")], [2])
 
 
+
+class TestDcl(Base):
+    def test_dcl_builtins_known(self):
+        iss = self.lint("""
+            (defun c:dlg (/ id st)
+              (setq id (load_dialog "x.dcl"))
+              (if (new_dialog "main" id "" '(-1 -1))
+                (progn
+                  (start_list "lst") (add_list "a") (end_list)
+                  (set_tile "t" "1") (mode_tile "t" 1) (get_tile "t") (get_attr "t" "label")
+                  (client_data_tile "t" "d")
+                  (action_tile "ok" "(done_dialog 1)")
+                  (setq st (start_dialog))))
+              (unload_dialog id) (term_dialog) (startapp "notepad" "a.txt")
+              st)
+        """)
+        self.assertNoErrors(iss)
+        self.assertEqual(self.find(iss, "UNDEF-FUNC"), [])
+
+    def test_dcl_arity(self):
+        iss = self.lint("""
+            (defun f () (set_tile "a") (done_dialog 1 2))
+        """)
+        self.assertEqual(len(self.find(iss, "ARITY", "ERROR")), 2)
+
+    def test_action_string_checked(self):
+        iss = self.lint("""
+            (defun on-x (k v) (princ k) (princ v))
+            (defun f ()
+              (action_tile "a" "(on-x $key $value)")
+              (action_tile "b" "(on-y $value)")
+              (action_tile "c" "(on-x \\"S\\" $value $reason)")
+              (action_tile "d" "(on-x $key")
+              (action_tile "e" "(setq *G* ($value))"))
+        """)
+        undef = self.find(iss, "UNDEF-FUNC", "ERROR")
+        self.assertEqual([i.line for i in undef if "on-y" in i.msg], [4])
+        self.assertEqual(len(self.find(iss, "ARITY", "ERROR", line=5)), 1)
+        self.assertEqual(len(self.find(iss, "DCL-ACTION", "ERROR", line=6)), 1)
+        self.assertEqual(len(self.find(iss, "DCL-ACTION", "ERROR", line=7)), 1)
+        self.assertEqual(self.find(iss, "LEAK"), [])
+        self.assertEqual([i.fmt() for i in iss if i.level == "ERROR" and i.line == 3], [])
+
+
 class TestCli(Base):
     def test_json_and_exit_code(self):
         self.write("bad.lsp", "(defun c:X () (khong-co))\n")

@@ -10,6 +10,7 @@ from .ltypes import (Sym, Cons, LispError, Ename, PickSet, FileH, VlaObj, SafeAr
 from .interp import compile_wc, isnum
 from .drawing import Ent, POINT_CODES, P, text_size
 
+TBL_SKIP = {5, 105, 330, 100, 102, 360}
 TABLES = {"LAYER": "LAYER", "LTYPE": "LTYPE", "STYLE": "STYLE", "DIMSTYLE": "DIMSTYLE",
           "BLOCK": "BLOCK", "VIEW": "VIEW", "UCS": "UCS", "APPID": "APPID", "VPORT": "VPORT"}
 
@@ -107,6 +108,11 @@ def install(I, dwg, vfs, mode="acad"):
           "VIEWSIZE": 30000.0, "VIEWCTR": (0.0, 0.0, 0.0), "EXTMIN": (0.0, 0.0, 0.0),
           "EXTMAX": (100000.0, 50000.0, 0.0), "LTSCALE": 1.0, "TEXTSTYLE": "Standard",
           "DIMSTYLE": "Standard", "PSTYLEMODE": 1, "UNITMODE": 0, "SECURELOAD": 1, "FILEDIA": 1}
+    for k, v in (getattr(dwg, "header", None) or {}).items():
+        if k in sv or k in ("LIMMIN", "LIMMAX", "PDMODE", "CELTYPE", "CECOLOR", "DIMTXT", "DIMASZ", "DIMLFAC", "DIMDEC"):
+            if k == "TILEMODE":
+                continue
+            sv[k] = v
     I.sysvars = sv
     I.getvar_raw = lambda n, default=None: sv.get(n.upper(), default)
 
@@ -162,6 +168,9 @@ def install(I, dwg, vfs, mode="acad"):
         return [Cons(-3, mklist(grp))]
 
     def entget_list(e, apps=None):
+        if getattr(e, "raw", False):
+            out = [Cons(-1, ename(e)), Cons(0, e.type)] + [pair(c, v) for c, v in e.data]
+            return mklist(out + xdata_part(e, apps))
         out = [Cons(-1, ename(e)), Cons(0, e.type), Cons(330, ename(owner_rec(e))), Cons(5, e.handle)]
         if e.kind == "table":
             out += [Cons(100, "AcDbSymbolTableRecord")]
@@ -199,15 +208,28 @@ def install(I, dwg, vfs, mode="acad"):
             return None
         e = ent_of(a[0])
         if e.kind in ("main", "sub"):
-            i = dwg.main.index(e)
-            for x in dwg.main[i + 1:]:
-                if alive(x):
-                    return ename(x)
+            main = dwg.main
+            i = getattr(e, "_mi", None)
+            if i is None or i >= len(main) or main[i] is not e:
+                i = main.index(e)
+            for k in range(i + 1, len(main)):
+                if alive(main[k]):
+                    return ename(main[k])
             return None
         if e.kind in ("block", "blockbegin"):
             b = dwg.blocks[e.owner.upper()]
-            chain = [b.begin] + [x for x in b.ents] + [b.end]
-            i = chain.index(e)
+            ch = getattr(b, "_chain", None)
+            if ch is None or ch[0] != len(b.ents):
+                chain = [b.begin]
+                for x in b.ents:
+                    chain.append(x)
+                    chain.extend(x.subs)
+                chain.append(b.end)
+                ch = b._chain = (len(b.ents), chain, {id(x): k for k, x in enumerate(chain)})
+            chain = ch[1]
+            i = ch[2].get(id(e))
+            if i is None:
+                return None
             for x in chain[i + 1:]:
                 if alive(x):
                     return ename(x)
@@ -324,6 +346,8 @@ def install(I, dwg, vfs, mode="acad"):
                 out.append(Cons(1, b.xref))
             return mklist(out)
         e = it
+        if getattr(e, "raw", False) and t != "LAYER":
+            return mklist([Cons(0, t)] + [pair(c, v) for c, v in e.data if c not in TBL_SKIP])
         if t == "LAYER":
             return mklist([Cons(0, "LAYER"), Cons(2, e.get(2)), Cons(70, e.get(70, 0)),
                            Cons(62, e.get(62, 7)), Cons(6, e.get(6, "Continuous"))])
@@ -332,6 +356,12 @@ def install(I, dwg, vfs, mode="acad"):
     def tblsearch_(a):
         t = tname(a[0])
         nm = I.str_(a[1]).upper()
+        if not (len(a) > 2 and a[2] is not None):
+            if t == "BLOCK":
+                b = dwg.blocks.get(nm)
+                return tbl_short(t, b) if b is not None and not getattr(b, "system", False) else None
+            e = dwg.tables[t].get(nm)
+            return tbl_short(t, e) if e is not None else None
         for it in tbl_items(t):
             if (it.name if t == "BLOCK" else it.get(2)).upper() == nm:
                 if len(a) > 2 and a[2] is not None:
@@ -379,7 +409,7 @@ def install(I, dwg, vfs, mode="acad"):
     d("DICTSEARCH", dictsearch_, 2, 3)
 
     def layoutlist_(a):
-        los = sorted([(lo.get(71, 0), nm) for nm, lo in dwg.layouts.items() if nm != "Model"])
+        los = sorted([(getattr(lo, "_tab", None) if getattr(lo, "_tab", None) is not None else lo.get(71, 0), nm) for nm, lo in dwg.layouts.items() if nm != "Model"])
         return mklist([nm for _, nm in los])
     d("LAYOUTLIST", layoutlist_, 0, 0)
 

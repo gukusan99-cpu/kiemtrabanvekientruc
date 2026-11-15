@@ -92,7 +92,8 @@
           (setq nOK 1)
           ;; 2. Module theo thu tu co dinh
           (setq mods '("KT_Layer.lsp" "KT_Text.lsp" "KT_Dim.lsp" "KT_Sheet.lsp"
-                       "KT_Match.lsp" "KT_Clean.lsp" "KT_Template.lsp" "KT_Menu.lsp"))
+                       "KT_Match.lsp" "KT_Clean.lsp" "KT_Template.lsp" "KT_Menu.lsp"
+                       "KT_Dialog.lsp"))
           ;; 3. Them cac KT_*.lsp khac co trong thu muc (neu ham liet ke file co)
           (if (member (type vl-directory-files) '(SUBR EXRXSUBR))
             (progn
@@ -112,7 +113,7 @@
             (progn
               (princ (strcat "\n[KT] " (itoa (length err)) " file LOI (bao lai cho nhom phat trien):"))
               (foreach x (reverse err) (princ (strcat "\n   - " x)))))
-          (princ "\n[KT] Go KTHELP de xem danh sach lenh, KTALL de kiem tra tat ca."))))
+          (princ "\n[KT] Go KT de mo hop thoai tong hop, KTHELP xem danh sach lenh, KTALL kiem tra tat ca."))))
     (princ "\n[KT] Chua nap bo KT."))
   (princ)
 )
