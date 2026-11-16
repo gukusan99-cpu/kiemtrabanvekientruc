@@ -28,7 +28,7 @@
 )
 
 (defun ktmau:fnok (sym)
-  (member (type sym) '(SUBR USUBR EXRXSUBR))
+  (if (and sym (not (member (type sym) '(STR INT REAL ENAME PICKSET FILE)))) T nil)   ; khong so ten kieu
 )
 
 (defun ktmau:clean (s / i c res)

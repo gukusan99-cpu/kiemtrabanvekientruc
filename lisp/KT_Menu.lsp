@@ -20,7 +20,8 @@
 
 (defun ktall:defined (sym)
   ;; T neu sym dang la ham (SUBR/USUBR)
-  (if (member (type (eval sym)) '(SUBR USUBR EXRXSUBR)) T nil)
+  (setq sym (eval sym))
+  (if (and sym (not (member (type sym) '(STR INT REAL ENAME PICKSET FILE)))) T nil)   ; khong so ten kieu (VinaCAD khac AutoCAD)
 )
 
 (defun ktall:pad (s n)
@@ -103,7 +104,7 @@
 (defun c:KTALL (/ r)
   (princ "\n=== KTALL: chay tat ca kiem tra ===")
   (cond
-    ((not (member (type kt:cfg-ok) '(SUBR USUBR)))
+    ((not (ktall:defined 'kt:cfg-ok))
      (princ "\n[KTALL] Chua nap KT_Core.lsp. Hay nap KT_Load.lsp truoc."))
     ;; pham vi: toan ban ve / vung (1 vung cho moi module); ESC -> khong chay
     ((and (ktall:defined 'kt:ask-scope) (not (kt:ask-scope)))

@@ -72,7 +72,7 @@
 (defun ktload:file (path / r)
   ;; nap 1 file; tra ve nil neu thanh cong, chuoi loi neu that bai
   (if (findfile path)
-    (if (member (type vl-catch-all-apply) '(SUBR EXRXSUBR))
+    (if (and vl-catch-all-apply (not (member (type vl-catch-all-apply) '(STR INT REAL ENAME PICKSET FILE))))
       (progn
         (setq r (vl-catch-all-apply 'load (list path)))
         (if (vl-catch-all-error-p r) (vl-catch-all-error-message r)))
@@ -95,7 +95,7 @@
                        "KT_Match.lsp" "KT_Clean.lsp" "KT_Template.lsp" "KT_Menu.lsp"
                        "KT_Dialog.lsp"))
           ;; 3. Them cac KT_*.lsp khac co trong thu muc (neu ham liet ke file co)
-          (if (member (type vl-directory-files) '(SUBR EXRXSUBR))
+          (if (and vl-directory-files (not (member (type vl-directory-files) '(STR INT REAL ENAME PICKSET FILE))))
             (progn
               (setq files (vl-catch-all-apply 'vl-directory-files (list d "KT_*.lsp" 1)))
               (if (and files (not (vl-catch-all-error-p files)))

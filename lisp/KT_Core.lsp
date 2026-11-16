@@ -16,7 +16,7 @@
 
 (vl-load-com)
 
-(setq *KT:VER*   "1.1"
+(setq *KT:VER*   "1.1.1"
       *KT:LAYER* "KT_CHECK"
       *KT:CFGNAME* "KT_ChuanCongTy.txt")
 (if (not *KT:ISSUES*) (setq *KT:ISSUES* nil))
@@ -1202,6 +1202,14 @@
 )
 
 ;;; ---------- Do kha nang cua phan mem CAD (chay tren VinaCAD de kiem chung) ----------
+;;; Ham co ton tai? Khong so ten kieu (type) vi moi CAD tra ve ten khac nhau
+;;; (AutoCAD: SUBR/USUBR/EXRXSUBR; VinaCAD/LMS co the khac) -> chi can gia tri
+;;; khong nil va khong phai du lieu thuong.
+(defun kt:fnp (sym / v)
+  (setq v (if (= (type sym) 'SYM) (eval sym) sym))
+  (if (and v (not (member (type v) '(STR INT REAL ENAME PICKSET FILE)))) T nil)
+)
+
 (defun c:KTPROBE (/ fns ok bad r)
   (setq fns '(vl-catch-all-apply vl-sort vl-string-search vl-string-subst vl-remove
               vl-remove-if-not vl-member-if vl-string-translate vl-string->list vl-list->string
@@ -1210,13 +1218,15 @@
               vla-get-EffectiveName vla-ZoomCenter vla-StartUndoMark vlax-3d-point
               vlax-safearray->list sssetfirst textbox layoutlist dictsearch namedobjdict handent))
   (foreach f fns
-    (if (member (type (eval f)) '(SUBR USUBR EXRXSUBR))
+    (if (kt:fnp f)
       (setq ok (cons f ok))
       (setq bad (cons f bad))))
   (princ (strcat "\n[KTPROBE] " (kt:str (getvar "ACADVER")) " - co " (itoa (length ok))
                  "/" (itoa (length fns)) " ham."))
   (princ (strcat "\n  SYSCODEPAGE=" (kt:str (getvar "SYSCODEPAGE"))
-                 "  LISPSYS=" (kt:str (getvar "LISPSYS"))))
+                 "  LISPSYS=" (kt:str (getvar "LISPSYS"))
+                 "\n  type car=" (vl-princ-to-string (type car))
+                 "  type kt:trim=" (vl-princ-to-string (type kt:trim))))
   (if bad
     (progn (princ "\n  THIEU: ") (foreach f (reverse bad) (princ (strcat (vl-princ-to-string f) " ")))))
   (setq r (vl-catch-all-apply 'kt:box (list (entlast))))

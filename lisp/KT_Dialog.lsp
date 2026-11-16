@@ -42,7 +42,8 @@
 
 ;;; ---------- Tien ich ----------
 (defun ktdlg:defined (sym)
-  (if (member (type (eval sym)) '(SUBR USUBR EXRXSUBR)) T nil)
+  (setq sym (eval sym))
+  (if (and sym (not (member (type sym) '(STR INT REAL ENAME PICKSET FILE)))) T nil)   ; khong so ten kieu (VinaCAD khac AutoCAD)
 )
 
 (defun ktdlg:pad (s n)

@@ -84,8 +84,13 @@ class Session:
             open(self.vfs.host("C:\\KT\\Fonts\\" + font), "w").close()
         if cfg_text is not None:
             self.write_cfg(cfg_text)
+        from . import ltypes as _lt
+        # mode "lms": giong VinaCAD thuc te (co ActiveX nhung (type car) khong phai SUBR)
+        _lt.TYPE_NAMES.clear()
+        if mode == "lms":
+            _lt.TYPE_NAMES.update({"SUBR": "LMS-SUBR", "USUBR": "LMS-USUBR"})
         self.I = Interp()
-        install(self.I, dwg, self.vfs, mode)
+        install(self.I, dwg, self.vfs, "acad" if mode == "lms" else mode)
         self.loaded = []
 
     # ---------------------------------------------------------------- file

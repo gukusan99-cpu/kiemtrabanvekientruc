@@ -1,8 +1,14 @@
 """Kieu du lieu AutoLISP cho trinh gia lap lispsim (chi thu vien chuan).
 
+
 nil = None (Python), T = Sym "T". Danh sach = chuoi o Cons (car/cdr) -> cap cham
 (dotted pair) tu nhien. INT = int (32 bit, tran so quay vong), REAL = float.
 """
+
+# Ten kieu ham tra ve boi (type ...). VinaCAD (nen LMS Tech) tra ten khac AutoCAD:
+# Session(mode="lms") dat {"SUBR": "LMS-SUBR", "USUBR": "LMS-USUBR"} de kiem tra code khong phu thuoc ten kieu.
+TYPE_NAMES = {}
+
 
 
 class Sym:
@@ -245,9 +251,9 @@ def lisp_type(x, T):
     if isinstance(x, Cons):
         return "LIST"
     if isinstance(x, Subr):
-        return "SUBR"
+        return TYPE_NAMES.get("SUBR", "SUBR")
     if isinstance(x, USubr):
-        return "USUBR"
+        return TYPE_NAMES.get("USUBR", "USUBR")
     if isinstance(x, Ename):
         return "ENAME"
     if isinstance(x, PickSet):

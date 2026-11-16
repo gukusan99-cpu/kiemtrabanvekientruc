@@ -347,3 +347,23 @@ class T6_Legacy_CDO(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ======================================================================
+class T7_VinaCAD_LMS(unittest.TestCase):
+    """VinaCAD that (nen LMS Tech, bao cao cua leader 11/2026): ActiveX co, nhung (type car)
+    khong tra 'SUBR -> code KHONG duoc phu thuoc ten kieu ham. Truoc khi sua: KTPROBE bao
+    0/28 ham, KT/KTALL bao 'Chua nap KT_Core'."""
+
+    def test_lms_commands(self):
+        cfg = mau_cfg()[3]
+        d, seed = make_nhanvien()
+        s = Session(d, mode="lms", cfg_text=cfg)
+        s.load_all()
+        r = s.command("KTPROBE")
+        self.assertIn("co 28/28 ham", r.out)
+        r = s.command("KTALL")
+        self.assertEqual(internal_errors(r), [], r.describe_errors())
+        out = r.out
+        self.assertNotIn("Chua nap KT_Core", out)
+        self.assertTrue(len(s.issues()) > 0)
