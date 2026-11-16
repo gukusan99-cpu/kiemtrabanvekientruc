@@ -307,13 +307,14 @@ class Drawing:
             t = (p[0] - dpt[0]) * u[0] + (p[1] - dpt[1]) * u[1]
             return (dpt[0] + u[0] * t, dpt[1] + u[1] * t, 0.0)
         e1, e2 = proj(p1), proj(p2)
-        meas = abs((p2[0] - p1[0]) * u[0] + (p2[1] - p1[1]) * u[1]) if measure is None else measure
+        # ma 42 (AutoCAD) = gia tri do DA NHAN DIMLFAC; measure = gia tri 42 cho truoc (vd do sai)
+        geo = abs((p2[0] - p1[0]) * u[0] + (p2[1] - p1[1]) * u[1])
+        meas = geo * m["dimlfac"] if measure is None else measure
         h = m["dimtxt"] * m["dimscale"]
         gap = 0.625 * m["dimscale"]
         mid = ((e1[0] + e2[0]) / 2, (e1[1] + e2[1]) / 2)
         tp = (mid[0] + v[0] * (gap + h / 2), mid[1] + v[1] * (gap + h / 2), 0.0)
-        val = meas * m["dimlfac"]
-        disp = ("%." + str(m["dimdec"]) + "f") % val
+        disp = ("%." + str(m["dimdec"]) + "f") % meas
         if override and "<>" not in override:
             disp = override
         elif override:
@@ -331,7 +332,9 @@ class Drawing:
              (1, override), (71, 5), (42, float(meas)), (3, m.get("name", style)), (13, p1), (14, p2),
              (50, float(rot))]
         d[9] = (3, self.tables["DIMSTYLE"][style.upper()].get(2))
-        return self.add("DIMENSION", d, space)
+        e = self.add("DIMENSION", d, space)
+        e._geo = geo if measure is None else None
+        return e
 
     def set_xdata(self, ent, app, items):
         self.appid(app)
@@ -344,6 +347,8 @@ class Drawing:
             items.append((1040 if isinstance(val, float) else 1070, val))
         items.append((1002, "}"))
         self.set_xdata(dim, "ACAD", items)
+        if 144 in codes and getattr(dim, "_geo", None) is not None:
+            dim.set(42, dim._geo * float(codes[144]))      # 42 theo DIMLFAC hieu dung
 
     # ------------------------------------------------------------ hinh hoc
     def bbox(self, e, depth=0):
@@ -493,18 +498,56 @@ def arc_points(c, r, a1, a2):
     return [(c[0] + r * math.cos(a), c[1] + r * math.sin(a), z) for a in angs]
 
 
+_TXT_SPECIAL = None
+
+
+def text_len(s):
+    """so ky tu hien thi: \\U+XXXX = 1, %%c/%%d/%%p/%%nnn = 1, %%u/%%o (gach chan/tren) = 0"""
+    global _TXT_SPECIAL
+    import re
+    if _TXT_SPECIAL is None:
+        _TXT_SPECIAL = re.compile(r"\\U\+[0-9A-Fa-f]{4}|\\M\+[0-9A-Fa-f]{5}|%%[0-9]{3}|%%[cdpCDP%]|%%[uoUOkK]")
+    if "\\" not in s and "%%" not in s:
+        return len(s)
+    n = 0
+    pos = 0
+    for m in _TXT_SPECIAL.finditer(s):
+        n += m.start() - pos
+        if m.group(0)[2:3].upper() not in ("U", "O", "K") or m.group(0)[0] == "\\":
+            n += 1
+        pos = m.end()
+    return n + len(s) - pos
+
+
 def text_size(s, h, wf=1.0):
-    return 0.75 * h * wf * max(1, len(s)), h
+    return 0.75 * h * wf * max(1, text_len(s)), h
 
 
 def text_corners(e):
+    """4 goc chu TEXT/ATTRIB/ATTDEF. Chu can le (72/73 khac 0): neo theo diem 11 nhu AutoCAD
+    (diem 10 trong DXF do AutoCAD tinh bang font that, khong khop be rong uoc luong)"""
     p = e.get(10)
     if not p:
         return []
     w, h = text_size(e.get(1, ""), e.get(40, 2.5), e.get(41, 1.0))
     r = e.get(50, 0.0)
     c, s = math.cos(r), math.sin(r)
-    return [(p[0] + x * c - y * s, p[1] + x * s + y * c, p[2]) for x, y in ((0, 0), (w, 0), (w, h), (0, h))]
+    ha, va = e.get(72, 0) or 0, e.get(73, 0) or 0
+    q = e.get(11)
+    x0, y0 = 0.0, 0.0
+    if (ha or va) and q and ha not in (3, 5):
+        p = q
+        x0 = {0: 0.0, 1: -w / 2, 2: -w, 4: -w / 2}.get(ha, 0.0)
+        y0 = {0: 0.0, 1: 0.0, 2: -h / 2, 3: -h}.get(va, 0.0)
+        if ha == 4:
+            y0 = -h / 2
+    elif ha in (3, 5) and q:
+        # aligned / fit: chu nam giua 10 va 11
+        w = math.hypot(q[0] - p[0], q[1] - p[1]) or w
+        r = math.atan2(q[1] - p[1], q[0] - p[0])
+        c, s = math.cos(r), math.sin(r)
+    return [(p[0] + x * c - y * s, p[1] + x * s + y * c, p[2] if len(p) > 2 else 0.0)
+            for x, y in ((x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h))]
 
 
 def mtext_corners(e):

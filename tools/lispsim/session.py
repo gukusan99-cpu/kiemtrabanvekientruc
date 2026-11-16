@@ -70,6 +70,10 @@ class Session:
             self.vfs.mkdirs(wp)
         for f in os.listdir(self.lispdir):
             src = os.path.join(self.lispdir, f)
+            # KT_ChuanCongTy.txt (chuan THAT cua cong ty trong lisp/) khong chep: moi phien tu
+            # quyet dinh file chuan (cfg_text / KTMAU); kich ban "chua co file chuan" van dung
+            if f.lower() == "kt_chuancongty.txt":
+                continue
             if os.path.isfile(src) and f.lower().endswith((".lsp", ".txt")):
                 shutil.copy(src, self.vfs.host(KT_HOME + "\\" + f))
         leg = os.path.join(self.lispdir, "legacy", "CheckDimOverlap.lsp")

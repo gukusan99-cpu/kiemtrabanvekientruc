@@ -294,7 +294,7 @@
     (setq nm (kt:dxf 2 d))
     (if (and nm (/= nm "")
              (not (wcmatch nm "*|*"))
-             (not (vl-string-search "$" nm))       ; kieu con "ISO-25$0"
+             (not (wcmatch nm "*`$#"))             ; kieu con "ISO-25$0" (khong bo xref bind "Xr$0$..")
              (or (null used) (member (strcase nm) used)))
       (progn
         (setq e  (tblobjname "DIMSTYLE" nm)
@@ -342,6 +342,13 @@
 )
 
 ;;; ---------- KHUNG TEN ----------
+(defun ktmau:fsize (en / b)
+  ;; kich thuoc lon nhat cua vung khung (vien block, du phong hop bao)
+  (if (setq b (kt:frame-box en))
+    (max (- (car (cadr b)) (car (car b))) (- (cadr (cadr b)) (cadr (car b))))
+    0.0)
+)
+
 (defun ktmau:khung-cands (/ raw spmax res nm key it sz nt sp r ed)
   ;; thong ke block co attribute (ca xref / block khong attribute cung dua vao, uu tien thap):
   ;; (KEY ten soluong kichthuoc-max sotag-max ename tyle-kichthuoc-max)
@@ -352,7 +359,7 @@
     (if (and nm (not (ktmau:xref-blk-p nm)))
       (setq ed (entget en)
             sp (kt:space ed)
-            sz (kt:boxsize en)
+            sz (ktmau:fsize en)
             raw (cons (list (strcase nm) nm sp sz (length (kt:attribs en)) en) raw)
             it (assoc sp spmax)
             spmax (if it
@@ -375,7 +382,14 @@
 (defun ktmau:khung-guess (cands / pool best)
   ;; khung ten = block co attribute LON NHAT trong khong gian cua no (>= 50%),
   ;; uu tien >= 3 tag; trong nhom chon block xuat hien nhieu nhat, roi nhieu tag hon
-  (setq pool (vl-remove-if-not '(lambda (c) (and (>= (nth 4 c) 3) (>= (nth 6 c) 0.5))) cands))
+  ;; uu tien block co attribute ghi ty le doc duoc ("1:100") - khung ten that; ky hieu goi chi tiet
+  ;; co hinh hoc lech xa diem chen (hop bao lon) khong lan at duoc khung
+  (setq pool (vl-remove-if-not
+               '(lambda (c) (and (>= (nth 4 c) 3) (vl-some '(lambda (a) (kt:parse-scale (cdr a)))
+                                                          (kt:attribs (nth 5 c)))))
+               cands))
+  (if (null pool)
+    (setq pool (vl-remove-if-not '(lambda (c) (and (>= (nth 4 c) 3) (>= (nth 6 c) 0.5))) cands)))
   (if (null pool) (setq pool (vl-remove-if-not '(lambda (c) (>= (nth 6 c) 0.5)) cands)))
   (foreach c pool
     (if (or (null best)
@@ -429,7 +443,7 @@
   (if (and blk en) (list blk en))
 )
 
-(defun ktmau:sec-khung (/ pk blk en tags tSo tTen tTL f others g ed tsc sx fd)
+(defun ktmau:sec-khung (/ pk blk en tags tSo tTen tTL f others g ed tsc sx fd g2 t2)
   ;; tra ve (block tagSo tagTen tagTL tylegoc (tag khac...)) hoac nil
   (if (setq pk (ktmau:pick-khung))
     (progn
@@ -457,9 +471,82 @@
       (initget 6)
       (setq f (getreal (strcat "\nTy le goc (he so nhan voi scale X block) <" (ktmau:fmt fd) ">: ")))
       (if (null f) (setq f fd))
+      ;; dong 2 cua ten ban ve (vd TEN_BAN_VE "MAT BANG CONG NANG" + TEN_CONG_TRINH "TANG 1 & TANG 2"):
+      ;; tag co gia tri THAY DOI giua cac khung (ten cong trinh that thi giong nhau o moi khung)
+      (setq g2 (ktmau:guess-sub blk tags (list tSo tTen tTL)))
+      (if (and g2 (/= tTen ""))
+        (progn
+          (setq t2 (ktmau:ask-tag "DONG 2 cua ten ban ve (noi sau tag ten, vd TANG 1)" g2 tags))
+          (if (and (/= t2 "") (/= t2 tTen)) (setq tTen (strcat tTen "+" t2)))))
       (foreach tg tags
-        (if (not (member tg (list tSo tTen tTL))) (setq others (cons tg others))))
+        (if (not (member tg (append (list tSo tTL) (kt:split tTen "+")))) (setq others (cons tg others))))
       (list blk tSo tTen tTL (float f) (reverse others))))
+)
+
+(defun ktmau:guess-sub (blk tags excl / best vals n nd)
+  ;; tag (khac excl) co ten *TEN* va >= 2 gia tri khac nhau giua cac khung blk
+  (foreach tg tags
+    (if (and (not best) (not (member tg excl)) (wcmatch tg "*TEN*"))
+      (progn
+        (setq vals nil)
+        (foreach en (kt:ss-all '((0 . "INSERT") (66 . 1)))
+          (if (= (strcase (kt:str (kt:effname en))) (strcase blk))
+            (progn
+              (setq n (kt:attval en tg))
+              (if (and n (/= n "") (not (member n vals))) (setq vals (cons n vals))))))
+        (setq nd (length vals))
+        (if (>= nd 2) (setq best tg)))))
+  best
+)
+
+;;; ---------- Khung phu (to bia / khung cung kho giay) ----------
+(defun ktmau:border-wh (nm / b)
+  ;; (rong cao) vien khung cua block nm (kt:blk-border) ; nil neu khong co
+  (if (setq b (kt:blk-border nm))
+    (list (- (car (cadr b)) (car (car b))) (- (cadr (cadr b)) (cadr (car b))))))
+
+(defun ktmau:extra-khungs (kh / mwh pw seen nm wh fac ok sx ed atts rows tg2 kw others)
+  ;; block khac khung chinh, vien cung ti le canh va moi lan chen co ty le thuc tron (>= 1)
+  ;; (to bia hang muc KHUNGT43, khung phoi canh KHUNGDIENNUOC...) -> hoi nguoi dung
+  (if (and kh (setq mwh (ktmau:border-wh (car kh))) (> (cadr mwh) 0))
+    (progn
+      (setq pw (/ (car mwh) (nth 4 kh)))                 ; chieu rong giay (mm)
+      (foreach en (kt:ss-all '((0 . "INSERT")))
+        (setq nm (kt:effname en) ed (entget en))
+        (if (and nm (= (kt:space ed) "Model") (/= (substr nm 1 1) "*")
+                 (/= (strcase nm) (strcase (car kh))) (not (member (strcase nm) seen))
+                 (not (ktmau:xref-blk-p nm)))
+          (progn
+            (setq seen (cons (strcase nm) seen) ok nil)
+            (if (and (setq wh (ktmau:border-wh nm)) (> (cadr wh) 0)
+                     (<= (abs (- (/ (/ (car wh) (cadr wh)) (/ (car mwh) (cadr mwh))) 1.0)) 0.01))
+              (progn
+                (setq fac (/ (car wh) pw) ok T)
+                (if (equal fac (float (fix (+ fac 0.5))) 0.01) (setq fac (float (fix (+ fac 0.5)))))
+                (foreach e2 (kt:ss-all (list '(0 . "INSERT") (cons 2 (kt:wcesc nm))))
+                  (setq sx (* fac (abs (cond ((kt:dxf 41 (entget e2))) (1.0)))))
+                  (if (or (< sx 0.99) (> (abs (- sx (fix (+ sx 0.5)))) 0.01)) (setq ok nil)))))
+            (if ok
+              (progn
+                (setq atts (mapcar 'car (kt:attribs en)))
+                (princ (strcat "\nKhung phu: " nm " (vien cung kho giay voi " (car kh) ", ty le goc "
+                               (ktmau:fmt fac) (if atts (strcat ", tag: " (kt:join atts ",")) ", khong attribute") ")"))
+                (initget "Co Khong")
+                (setq kw (getkword "\nThem block nay vao muc KHUNG? [Co/Khong] <Co>: "))
+                (if (/= kw "Khong")
+                  (progn
+                    (setq others nil
+                          tg2 (if (and (/= (nth 1 kh) "") (member (nth 1 kh) atts)) T))
+                    (if tg2
+                      (foreach tg atts
+                        (if (not (member tg (append (list (nth 1 kh) (nth 3 kh)) (kt:split (nth 2 kh) "+"))))
+                          (setq others (cons tg others)))))
+                    (setq rows (cons (if tg2
+                                       (list nm (nth 1 kh) (nth 2 kh) (if (member (nth 3 kh) atts) (nth 3 kh) "")
+                                             fac (reverse others))
+                                       (list nm "" "" "" fac nil))
+                                     rows)))))))))))
+  (reverse rows)
 )
 
 (defun ktmau:frames (kh / raw res ed sp bx tsc sct v1 v2 agree disagree)
@@ -472,7 +559,7 @@
         (progn
           (setq ed  (entget en)
                 sp  (kt:space ed)
-                bx  (kt:box en)
+                bx  (kt:frame-box en)
                 tsc (if (/= (nth 3 kh) "") (kt:parse-scale (kt:attval en (nth 3 kh))))
                 sct (* (abs (cond ((kt:dxf 41 ed)) (1.0))) (nth 4 kh))
                 v1  (if (/= (nth 1 kh) "") (kt:attval en (nth 1 kh)))
@@ -501,16 +588,63 @@
 )
 
 ;;; ---------- BLOCK ky hieu ----------
-(defun ktmau:blk-role (nm has-att)
+(defun ktmau:blk-role (nm has-att / u)
+  ;; ten co dau ("TR\\U+1EE4C" = TRUC, "M\\U+0110..." ) -> bo dau truoc khi so mau
+  (setq u (kt:unaccent nm))
   (cond
-    ((kt:wcmatch-any nm '("*TRUC*" "*AXIS*" "*GRID*")) "TRUC")
-    ((kt:wcmatch-any nm '("*CAODO*" "*CAO*DO*" "*LEVEL*" "*ELEV*" "*COS*")) "CAODO")
-    ((kt:wcmatch-any nm '("*CHITIET*" "*CHI*TIET*" "*DETAIL*")) "CHITIET")
-    ((kt:wcmatch-any nm '("*MATCAT*" "*MAT*CAT*" "*SECTION*" "KH*CAT*" "*_CAT*" "CAT*")) "MATCAT")
-    ;; "COT" = cot (cao do) hoac cot (cot nha) -> chi coi la cao do khi block co attribute
-    ((and has-att (kt:wcmatch-any nm '("*COT*"))) "CAODO")
-    ((kt:wcmatch-any nm '("*CUA*" "*DOOR*" "*WINDOW*")) "CUA")
+    ((kt:wcmatch-any u '("*TRUC*" "*AXIS*" "*GRID*")) "TRUC")
+    ((kt:wcmatch-any u '("*CAODO*" "*CAO*DO*" "*LEVEL*" "*ELEV*" "*COS*")) "CAODO")
+    ((kt:wcmatch-any u '("*CHITIET*" "*CHI*TIET*" "*DETAIL*")) "CHITIET")
+    ((kt:wcmatch-any u '("*MATCAT*" "*MAT*CAT*" "*SECTION*" "KH*CAT*" "*_CAT*" "CAT*" "*VET*CAT*")) "MATCAT")
+    ;; "COT"/"CODE" = cot (cao do) hoac cot (cot nha) -> chi coi la cao do khi block co attribute
+    ((and has-att (kt:wcmatch-any u '("*COT*" "*CODE*"))) "CAODO")
+    ((kt:wcmatch-any u '("*CUA*" "*DOOR*" "*WINDOW*")) "CUA")
     (T "KHAC"))
+)
+
+(defun ktmau:lvlike (v)
+  ;; gia tri attribute dang cao do: +3.600 -0.450 %%p0.000 0.000
+  (and (= (type v) 'STR)
+       (wcmatch (strcase (kt:trim v)) "[+-]#*.###,[+-] #*.###,%%P#*.###,0.000,[+-]#*,###"))
+)
+
+(defun ktmau:shlike (v sheets)
+  ;; gia tri la so hieu ban ve co trong file (MC/02, KT-03)
+  (and (= (type v) 'STR) (/= v "") (member (kt:norm v) sheets))
+)
+
+(defun ktmau:refpt (nm / segs ed pts a b len mx grp it singles p sol)
+  ;; diem goc ky hieu cao do trong block = DINH TAM GIAC (nam tren vach cao do):
+  ;; dinh cac SOLID (neu co), khong thi dau mut cac doan LINE/LWPOLYLINE ngan (< 1/2 doan dai nhat);
+  ;; gom theo y: nhom chi co 1 diem = dinh nhon. Tra "x,y"; nil neu khong ro hoac dinh = diem chen.
+  (foreach e (ktmau:blk-ents nm)
+    (setq ed (entget e) pts nil)
+    (cond ((= (kt:dxf 0 ed) "SOLID")
+           (foreach c '(10 11 12 13)
+             (if (and (kt:dxf c ed) (not (vl-member-if '(lambda (q) (equal q (kt:2d (kt:dxf c ed)) 1e-6)) sol)))
+               (setq sol (cons (kt:2d (kt:dxf c ed)) sol)))))
+          ((= (kt:dxf 0 ed) "LINE") (setq pts (list (kt:dxf 10 ed) (kt:dxf 11 ed))))
+          ((= (kt:dxf 0 ed) "LWPOLYLINE")
+           (foreach g ed (if (= (car g) 10) (setq pts (append pts (list (cdr g))))))))
+    (while (cdr pts)
+      (setq a (kt:2d (car pts)) b (kt:2d (cadr pts)) pts (cdr pts) len (distance a b)
+            segs (cons (list len a b) segs) mx (max len (cond (mx) (0.0))))))
+  (if (null sol)
+    (foreach sg segs
+      (if (< (car sg) (* 0.5 mx))
+        (foreach q (cdr sg)
+          (if (not (vl-member-if '(lambda (r) (equal r q 1e-6)) sol)) (setq sol (cons q sol)))))))
+  (foreach q sol
+    (if (setq it (vl-member-if '(lambda (g) (equal (car g) (cadr q) (* 0.01 (max 1.0 (cond (mx) (1.0)))))) grp))
+      (setq grp (subst (cons (car (car it)) (cons q (cdr (car it)))) (car it) grp))
+      (setq grp (cons (list (cadr q) q) grp))))
+  (setq singles (vl-remove-if-not '(lambda (g) (null (cddr g))) grp))
+  (if (and (= (length singles) 1) (cdr grp))
+    (progn
+      (setq p (cadr (car singles)))
+      (if (not (equal p '(0.0 0.0) 1e-6))
+        (strcat (ktmau:fmt (/ (fix (+ (* (car p) 100.0) (if (minusp (car p)) -0.5 0.5))) 100.0)) ","
+                (ktmau:fmt (/ (fix (+ (* (cadr p) 100.0) (if (minusp (cadr p)) -0.5 0.5))) 100.0))))))
 )
 
 (defun ktmau:blk-maintag (role tags / r)
@@ -525,30 +659,42 @@
   (cond (r) ((car tags)) (""))
 )
 
-(defun ktmau:sec-block (kblk / grp ed nm key it tags res role)
-  ;; block dang duoc chen, co attribute hoac ten la ky hieu -> BLOCK|ten|vai tro|tag chinh
+(defun ktmau:sec-block (kblks sheets / grp ed nm key it tags res role vals nlv nsh mt rt rp atts)
+  ;; block dang duoc chen, co attribute hoac ten la ky hieu ->
+  ;;   BLOCK|ten|vai tro|tag chinh|tag phu (so ban ve tham chieu)|diem goc x,y (CAODO)
+  ;; kblks: ten block khung (HOA); sheets: so hieu ban ve (kt:norm) de nhan ky hieu tham chieu
+  ;; grp: (KEY ten tags so-gia-tri gia-tri-cao-do gia-tri-so-hieu)
   (foreach en (kt:ss-all '((0 . "INSERT")))
     (setq ed (entget en) nm (kt:effname en))
     (if (and nm (/= nm "") (/= (substr nm 1 1) "*"))
       (progn
-        (setq key (strcase nm) it (assoc key grp))
-        (cond
-          ((and it (null (caddr it)) (= (kt:dxf 66 ed) 1))
-           (setq grp (subst (list key nm (mapcar 'car (kt:attribs en))) it grp)))
-          ((null it)
-           (setq grp (cons (list key nm (if (= (kt:dxf 66 ed) 1) (mapcar 'car (kt:attribs en))))
-                           grp)))))))
+        (setq key (strcase nm) it (assoc key grp)
+              atts (if (= (kt:dxf 66 ed) 1) (kt:attribs en)))
+        (if (null it)
+          (setq it (list key nm nil 0 0 0) grp (cons it grp)))
+        (setq tags (cond ((nth 2 it)) ((mapcar 'car atts)))
+              nlv (+ (nth 4 it) (if (vl-some '(lambda (a) (ktmau:lvlike (cdr a))) atts) 1 0))
+              nsh (+ (nth 5 it) (if (vl-some '(lambda (a) (ktmau:shlike (cdr a) sheets)) atts) 1 0)))
+        (setq grp (subst (list key nm tags (+ (nth 3 it) (if atts 1 0)) nlv nsh) it grp)))))
   (foreach g grp
     (setq nm (nth 1 g) tags (nth 2 g))
-    (if (and (/= (car g) (strcase kblk)) (not (ktmau:xref-blk-p nm)))
+    (if (and (not (member (car g) kblks)) (not (ktmau:xref-blk-p nm)))
       (progn
         (if (null tags) (setq tags (ktmau:attdefs nm)))
-        (if (or tags
-                (kt:wcmatch-any nm '("*TRUC*" "*AXIS*" "*CAODO*" "*LEVEL*" "*MATCAT*" "*MAT*CAT*"
-                                     "*SECTION*" "*CHITIET*" "*DETAIL*")))
+        (setq role (if (or tags (/= (ktmau:blk-role nm nil) "KHAC")) (ktmau:blk-role nm (if tags T nil))))
+        ;; vai tro theo gia tri: >= 80% lan chen co gia tri cao do -> CAODO; co so hieu ban ve -> MATCAT/CHITIET
+        (if (and role (= role "KHAC") (> (nth 3 g) 0))
+          (cond ((and (null (cdr tags)) (>= (nth 4 g) (* 0.8 (nth 3 g)))) (setq role "CAODO"))
+                ((and (cdr tags) (>= (nth 5 g) (* 0.5 (nth 3 g)))) (setq role "MATCAT"))))
+        (if role
           (progn
-            (setq role (ktmau:blk-role nm (if tags T nil)))
-            (setq res (cons (ktmau:row "BLOCK" (list nm role (ktmau:blk-maintag role tags)))
+            (setq mt (ktmau:blk-maintag role tags)
+                  rt (if (member role '("MATCAT" "CHITIET"))
+                       (ktmau:first-match (vl-remove mt tags)
+                                          '("*VITRI*" "*SO*BV*" "*BV*" "*BAN*VE*" "*SHEET*" "*KT*" "*") nil))
+                  rp (if (= role "CAODO") (ktmau:refpt nm)))
+            (setq res (cons (ktmau:row "BLOCK" (append (list nm role mt)
+                                                       (cond (rp (list (cond (rt) ("")) rp)) (rt (list rt)))))
                             res)))))))
   (ktmau:sort-str res)
 )
@@ -559,8 +705,11 @@
   (if (setq d (dictsearch (namedobjdict) "ACAD_LAYOUT"))
     (foreach pr d
       (if (and (= (car pr) 350) (= (type (cdr pr)) 'ENAME) (setq ed (entget (cdr pr))))
-        (if (and (setq nm (kt:dxf 1 ed)) (/= (strcase nm) "MODEL"))
-          (setq lst (cons (list (cond ((kt:dxf 71 ed)) (0)) nm) lst))))))
+        ;; ma 1 dau tien thuoc AcDbPlotSettings (ten page setup) -> lay sau (100 . "AcDbLayout")
+        (progn
+          (setq ed (cond ((member '(100 . "AcDbLayout") ed)) (ed)))
+          (if (and (setq nm (kt:dxf 1 ed)) (/= nm "") (/= (strcase nm) "MODEL"))
+            (setq lst (cons (list (cond ((kt:dxf 71 ed)) (0)) nm) lst)))))))
   (if lst
     (setq r (mapcar 'cadr (ktmau:msort (reverse lst) '(lambda (a b) (< (car a) (car b)))))))
   (if (and (null r) (ktmau:fnok layoutlist))
@@ -590,7 +739,7 @@
   (if (equal sc (float r) 0.01) r sc)
 )
 
-(defun ktmau:text-stats (frames / vps scales ed sp p h sc f cnt tot v it res)
+(defun ktmau:text-stats (frames stys / vps scales ed sp p h sc f cnt tot v it res)
   ;; tra ve (list chieu-cao-giay ty-le-tim-thay)
   (kt:reset-cache)
   (setq vps (ktmau:try 'kt:viewports nil))
@@ -607,7 +756,10 @@
           h  (kt:dxf 40 ed)
           p  (kt:dxf 10 ed)
           sc nil)
-    (if (and h p (> h 0))
+    (if (and h p (> h 0)
+             ;; chi chu dung textstyle duoc chon (bo chu rac copy tu file khac)
+             (or (null stys) (member (strcase (cond ((kt:dxf 7 ed)) ("STANDARD"))) stys))
+             (not (and (= (kt:dxf 0 ed) "MTEXT") (vl-string-search "\\H" (kt:txt ed)))))
       (progn
         (setq p (kt:2d p))
         (cond
@@ -617,17 +769,63 @@
                (if (and (not sc) (kt:inbox p (nth 3 v) (nth 4 v))) (setq sc (nth 2 v))))))
         (if (and sc (> sc 0))
           (progn
-            ;; lam tron 0.1mm (0.5mm lam mat 1.8 -> 2.0, KTTEXT dung sai 3% se bao nham chu 1.8)
-            (setq v (/ (fix (+ (* 10.0 (/ h sc)) 0.5)) 10.0))
+            ;; lam tron 0.05mm (0.1mm lam 0.75 -> 0.8, 1.25 -> 1.3: KTTEXT dung sai 3% se bao nham)
+            (setq v (/ (fix (+ (* 20.0 (/ h sc)) 0.5)) 20.0))
             (if (> v 0)
               (progn
                 (setq tot (1+ tot) it (assoc v cnt))
                 (if it
                   (setq cnt (subst (cons v (1+ (cdr it))) it cnt))
                   (setq cnt (cons (cons v 1) cnt))))))))))
+  ;; gia tri chiem > 5%, hoac >= 1% va >= 5 chu (ban ve mau lon: chu dien tich, ten do noi that...)
   (foreach c cnt
-    (if (> (/ (float (cdr c)) (max tot 1)) 0.05) (setq res (cons (car c) res))))
+    (if (or (> (/ (float (cdr c)) (max tot 1)) 0.05)
+            (and (>= (cdr c) 5) (>= (/ (float (cdr c)) (max tot 1)) 0.01)))
+      (setq res (cons (car c) res))))
   (list (ktmau:sort-num res) scales)
+)
+
+(defun ktmau:ovr (en / x l r)
+  ;; override dimstyle (XData ACAD DSTYLE) -> ((ma . gia tri) ...)
+  (setq x (vl-catch-all-apply 'entget (list en '("ACAD"))))
+  (if (not (vl-catch-all-error-p x))
+    (setq l (cdr (assoc "ACAD" (cdr (assoc -3 x))))))
+  (while (and l (/= (car (car l)) 1002)) (setq l (cdr l)))
+  (setq l (cdr l))
+  (while (and l (cdr l) (/= (car (car l)) 1002))
+    (if (= (car (car l)) 1070) (setq r (cons (cons (cdr (car l)) (cdr (cadr l))) r)))
+    (setq l (cddr l)))
+  r
+)
+
+(defun ktmau:dim-stats (frames dstys / ed st ov ds tx f sc v cnt tot it res)
+  ;; chieu cao chu dim quy ra giay (mm) = DIMTXT hieu dung x (DIMSCALE neu > 0, khong thi 1) / TL khung
+  ;; chi dim dung dimstyle duoc chon; tra ve cac gia tri chiem >= 5%
+  (setq tot 0)
+  (foreach en (kt:ss-all '((0 . "DIMENSION")))
+    (setq ed (entget en))
+    (if (and (= (kt:space ed) "Model")
+             (or (null dstys) (member (strcase (cond ((kt:dxf 3 ed)) (""))) dstys))
+             (setq st (tblsearch "DIMSTYLE" (cond ((kt:dxf 3 ed)) ("STANDARD"))))
+             (setq f (ktmau:frame-at (kt:2d (kt:dxf 10 ed)) "Model" frames))
+             (setq sc (nth 4 f)) (> sc 0))
+      (progn
+        (setq ov (ktmau:ovr en)
+              ds (cond ((cdr (assoc 40 ov))) ((kt:dxf 40 st)) (1.0))
+              tx (cond ((cdr (assoc 140 ov))) ((kt:dxf 140 st)) (2.5))
+              v  (/ (fix (+ (* 20.0 (/ (* tx (if (> ds 0) ds 1.0)) sc)) 0.5)) 20.0))
+        (if (> v 0)
+          (setq tot (1+ tot) it (assoc v cnt)
+                cnt (if it (subst (cons v (1+ (cdr it))) it cnt) (cons (cons v 1) cnt)))))))
+  (foreach c cnt
+    (if (>= (/ (float (cdr c)) (max tot 1)) 0.05) (setq res (cons (car c) res))))
+  (ktmau:sort-num res)
+)
+
+(defun ktmau:nojunk (lst)
+  ;; bo ten rac: xref bind ("Xr...$0$...") - giu nguyen danh sach neu bo het
+  (cond ((vl-remove-if '(lambda (x) (wcmatch x "*$0$*,*|*")) lst))
+        (T lst))
 )
 
 (defun ktmau:uniq-num (lst / res)
@@ -638,7 +836,7 @@
 )
 
 ;;; ---------- SETTING ----------
-(defun ktmau:sec-setting (heights scales fonts / hs)
+(defun ktmau:sec-setting (heights scales fonts dhs / hs)
   (setq hs (if heights heights '(1.8 2.0 2.5 3.0 3.5 5.0))
         scales (ktmau:sort-num
                  (ktmau:uniq-num
@@ -649,6 +847,10 @@
     (strcat ";   " (if heights "Thong ke tu ban ve mau (lam tron 0.1mm, gia tri chiem >5%)."
                                "Khong thong ke duoc -> dung gia tri mac dinh."))
     (ktmau:row "SETTING" (list "CAO_CHU_GIAY" (kt:join (mapcar 'ktmau:fmt hs) ",")))
+    "; CAO_CHU_DIM: chieu cao chu DIM tren giay (mm) = DIMTXT x (DIMSCALE neu > 0, khong thi 1) / TL khung."
+    (if dhs
+      (ktmau:row "SETTING" (list "CAO_CHU_DIM" (kt:join (mapcar 'ktmau:fmt dhs) ",")))
+      ";   (khong thong ke duoc - KTDIM suy tu muc DIMSTYLE)")
     "; TY_LE_CHO_PHEP: mau so ty le duoc phep (100 = 1/100). Gom ty le tim thay + ty le thong dung."
     (ktmau:row "SETTING" (list "TY_LE_CHO_PHEP" (kt:join (mapcar 'ktmau:fmt scales) ",")))
     "; LAYER_MAU_BYLAYER: 1 = doi tuong bat buoc mau/linetype ByLayer, 0 = khong kiem."
@@ -719,17 +921,18 @@
     ";;;   LAYER|ten|mau(1-255)|linetype|lineweight(1/100mm, -3=mac dinh)|plot(1/0)"
     ";;;   DIMSTYLE|ten|dimscale|dimlfac|dimtxt|dimasz|textstyle|dimdec|annotative(1/0)"
     ";;;   TEXTSTYLE|ten|font|bigfont|chieu cao co dinh(0=khong co dinh)|width factor"
-    ";;;   KHUNG|ten block|tag so hieu|tag ten ban ve|tag ty le|ty le goc (nhan voi scale X)|tag khac..."
-    ";;;   BLOCK|ten block|vai tro (TRUC/CAODO/MATCAT/CHITIET/CUA/KHAC)|tag chinh"
+    ";;;   KHUNG|ten block|tag so hieu|tag ten ban ve(+tag dong 2)|tag ty le|ty le goc (nhan voi scale X)|tag khac..."
+    ";;;   BLOCK|ten block|vai tro (TRUC/CAODO/MATCAT/CHITIET/CUA/KHAC)|tag chinh|tag so ban ve tham chieu|diem goc x,y"
     ";;;   LAYOUT|ten layout"
     ";;;   DANHMUC|so hieu|ten ban ve"
     ";;;   SETTING|KHOA|gia tri"
-    ";;; Ten lay tu ban ve giu nguyen (co the co ky tu tieng Viet/\\U+XXXX)."
+    ";;; Ten lay tu ban ve giu nguyen nhu AutoLISP thay: ky tu thuoc codepage = 1 byte, ky tu ngoai"
+    ";;; codepage = \\U+XXXX (vd TRUC co dau = TR\\U+1EE4C). Khong luu lai file bang UTF-8."
     ";;; ============================================================")
 )
 
 ;;; ---------- Lenh chinh ----------
-(defun c:KTMAU (/ *error* filt use rl rd rt kh frames rb ro rm st rs lines f ok n)
+(defun c:KTMAU (/ *error* filt use rl rd rt kh khs frames rb ro rm st rs lines f ok n dst)
   (defun *error* (m)
     (if (not (wcmatch (strcase m) "*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\n[KTMAU] Loi: " m))
@@ -746,20 +949,30 @@
      (if filt
        (progn
          (princ "\nDang quet doi tuong dang dung...")
-         (setq use (ktmau:try 'ktmau:scan-usage nil))))
+         (setq use (ktmau:try 'ktmau:scan-usage nil))
+         ;; bo layer/dimstyle rac xref bind ("Xr QC$0$..."); textstyle cua dimstyle duoc giu van giu
+         (if use (setq use (list (ktmau:nojunk (car use)) (ktmau:nojunk (cadr use))
+                                 (ktmau:nojunk (caddr use)))))))
      ;; bang ky hieu
      (setq rl (ktmau:try 'ktmau:sec-layer (list (car use)))
            rd (ktmau:try 'ktmau:sec-dimstyle (list (cadr use)))
            rt (ktmau:try 'ktmau:sec-textstyle (list (caddr use) (cdr rd))))
      ;; khung ten (hoi nguoi dung)
      (setq kh (ktmau:try 'ktmau:sec-khung nil))
-     (if kh (setq frames (ktmau:try 'ktmau:frames (list kh))))
+     ;; khung phu (to bia, khung cung kho giay khac ten) -> nhieu dong KHUNG
+     (setq khs (if kh (cons kh (ktmau:try 'ktmau:extra-khungs (list kh)))))
+     (foreach k khs (setq frames (append frames (ktmau:try 'ktmau:frames (list k)))))
      (princ "\nDang thu thap block, layout, danh muc, thong ke chu...")
-     (setq rb (ktmau:try 'ktmau:sec-block (list (if kh (car kh) "")))
+     (setq dst (mapcar '(lambda (r) (strcase (car (kt:split (substr r 10) "|")))) (car rd)))
+     (setq rb (ktmau:try 'ktmau:sec-block
+                         (list (mapcar '(lambda (k) (strcase (car k))) khs)
+                               (vl-remove "" (mapcar '(lambda (f) (kt:norm (nth 5 f))) frames))))
            ro (ktmau:try 'ktmau:layouts nil)
            rm (ktmau:try 'ktmau:sec-danhmuc (list frames))
-           st (ktmau:try 'ktmau:text-stats (list frames))
-           rs (ktmau:try 'ktmau:sec-setting (list (car st) (cadr st) (cdr rt))))
+           st (ktmau:try 'ktmau:text-stats
+                         (list frames (if filt (mapcar '(lambda (r) (strcase (car (kt:split (substr r 11) "|")))) (car rt)))))
+           rs (ktmau:try 'ktmau:sec-setting
+                         (list (car st) (cadr st) (cdr rt) (ktmau:try 'ktmau:dim-stats (list frames dst)))))
      ;; ghep noi dung
      (setq lines
        (append
@@ -770,9 +983,10 @@
          (car rd)
          (list "" "; ---------- TEXTSTYLE: ten|font|bigfont|cao co dinh|width ----------") (car rt)
          (list "" "; ---------- KHUNG: block|tag so hieu|tag ten|tag ty le|ty le goc|tag khac... ----------")
-         (if kh
-           (list (ktmau:row "KHUNG" (append (list (nth 0 kh) (nth 1 kh) (nth 2 kh) (nth 3 kh) (nth 4 kh))
-                                            (nth 5 kh))))
+         (if khs
+           (mapcar '(lambda (k) (ktmau:row "KHUNG" (append (list (nth 0 k) (nth 1 k) (nth 2 k) (nth 3 k) (nth 4 k))
+                                                           (nth 5 k))))
+                   khs)
            (list "; (chua xac dinh khung ten - hay them tay dong KHUNG|...)"))
          (list "" "; ---------- BLOCK: ten|vai tro|tag chinh  (KIEM TRA LAI vai tro) ----------") rb
          (list "" "; ---------- LAYOUT ----------")
@@ -788,7 +1002,7 @@
          (kt:cfg-load)
          (princ "\n=== KTMAU: hoan tat ===")
          (foreach x (list (list "LAYER" (length rl)) (list "DIMSTYLE" (length (car rd)))
-                          (list "TEXTSTYLE" (length (car rt))) (list "KHUNG" (if kh 1 0))
+                          (list "TEXTSTYLE" (length (car rt))) (list "KHUNG" (length khs))
                           (list "BLOCK" (length rb)) (list "LAYOUT" (length ro))
                           (list "DANHMUC" (length rm)))
            (princ (strcat "\n  " (car x) ": " (itoa (cadr x)))))

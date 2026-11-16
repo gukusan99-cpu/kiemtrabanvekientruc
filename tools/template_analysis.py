@@ -66,7 +66,7 @@ def fmt(x, nd=3):
     if isinstance(x, float):
         if abs(x - round(x)) < 1e-6:
             return str(int(round(x)))
-        return ("%." + str(nd) + "f") % x
+        return (("%." + str(nd) + "f") % x).rstrip("0").rstrip(".")
     return str(x)
 
 
@@ -707,7 +707,7 @@ def emit_cfg(T, path):
     # ---------------- BLOCK
     A("; ---------- BLOCK: ten|vai tro|tag chinh|tag phu (so ban ve tham chieu)|diem goc x,y ----------")
     A("; TRUC: diem chen = DUOI duoi cua ky hieu (nam tren duong truc), vong tron o phia tren 400 x scale.")
-    A("; CAODO: diem goc = dinh tam giac tren vach cao do, trong block o (x,y) cot 6; diem chen KHONG nam")
+    A("; CAODO: diem goc = dinh tam giac tren vach cao do = (x,y) trong block o truong cuoi; diem chen KHONG nam")
     A(";   tren vach (lech 49 x scale) -> KTKHOP doi diem goc qua scale/mirror/xoay cua tung lan chen.")
     ref = T.level_refpt("COTCAODO")
     A("BLOCK|%s|TRUC|A" % L("TRỤC"))

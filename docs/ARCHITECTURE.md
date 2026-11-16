@@ -35,14 +35,16 @@ tools/lisplint.py    kiểm tra tĩnh (bắt buộc sạch ERROR trước khi gi
 |---|---|
 | `(kt:cfg-ok)` | nạp file chuẩn nếu chưa; T nếu có |
 | `(kt:cfg "SEC")` | danh sách dòng (mỗi dòng = list chuỗi, đã bỏ tên mục) |
-| `(kt:cfg-names "SEC")` | list trường 1 viết HOA |
+| `(kt:cfg-names "SEC")` | list trường 1 viết HOA (`strcase`) |
+| `(kt:ukey s)` `(kt:cfg-keys "SEC")` | khóa so sánh tên: HOA cả chữ Việt có dấu, `\U+xxxx` → hex HOA, ký tự > 255 (LISPSYS=1) → `\U+XXXX`, byte CP1258 Ă/Đ/Ơ/Ư → mã Unicode. `kt:cfg-row` so bằng khóa này |
 | `(kt:cfg-row "SEC" name)` | dòng có trường 1 = name |
 | `(kt:cfg-val key def)` `(kt:cfg-num key def)` `(kt:cfg-list key)` | đọc `SETTING|KEY|giatri` |
 | `(kt:ss-all filter)` | list ename theo ssget "_X" |
 | `(kt:dxf code ed)` `(kt:2d p)` `(kt:3d p)` | tiện ích |
 | `(kt:space ed)` `(kt:cur-space)` | "Model" / tên layout |
 | `(kt:box en)` `(kt:cen en)` `(kt:boxsize en)` `(kt:inbox p mn mx)` | hình học |
-| `(kt:effname en)` `(kt:attribs en)` `(kt:attval en tag)` | block |
+| `(kt:effname en)` `(kt:attribs en)` `(kt:attval en tag)` `(kt:tag1 tag)` | block; `tag` dạng `"A+B"` → nối giá trị khác rỗng (tên bản vẽ 2 dòng), `kt:tag1` → `"A"` |
+| `(kt:frame-box en)` `(kt:blk-border nm)` | vùng khung = viền LWPOLYLINE lớn nhất của block (bỏ attribute/ảnh tràn ra ngoài), dự phòng `kt:box` |
 | `(kt:split s "|")` `(kt:join lst ",")` `(kt:trim s)` `(kt:num s)` `(kt:str x)` `(kt:wcmatch-any s pats)` | chuỗi |
 | `(kt:parse-scale "1/100")` → 100.0 | |
 | `(kt:frames)` | list khung tên: `(ename space minpt maxpt scale-thuc sohieu ten scale-ghi-trong-khung)` |
@@ -64,9 +66,11 @@ SETTING|KEY|value
 LAYER|ten|mau|linetype|lineweight(1/100mm, -3=default)|plot(1/0)
 DIMSTYLE|ten|dimscale|dimlfac|dimtxt|dimasz|dimtxsty|dimdec|annotative(1/0)
 TEXTSTYLE|ten|font file|bigfont|chieu cao co dinh|width factor
-KHUNG|ten block|tag so hieu|tag ten ban ve|tag ty le|ty le goc (he so nhan voi scale X block)|tag khac...
-BLOCK|ten block chuan (ky hieu truc, cao do, mat cat, chi tiet...)|vai tro (TRUC/CAODO/MATCAT/CHITIET/CUA/...)|tag chinh
+KHUNG|ten block|tag so hieu|tag ten ban ve(+tag dong 2)|tag ty le|ty le goc (he so nhan voi scale X block)|tag khac...
+      (nhieu dong KHUNG; to bia khong attribute: KHUNG|KHUNGT43||||54)
+BLOCK|ten block chuan (ky hieu truc, cao do, mat cat, chi tiet...)|vai tro (TRUC/CAODO/MATCAT/CHITIET/CUA/...)|tag chinh|tag so ban ve tham chieu|diem goc x,y
 LAYOUT|ten layout trong mau
 DANHMUC|so hieu|ten ban ve   (danh muc ban ve chuan cua bo ho so)
 ```
-SETTING quan trọng: `CAO_CHU_GIAY` (vd `1.8,2.0,2.5,3.5,5.0` mm giấy), `TY_LE_CHO_PHEP` (`20,25,50,100,200`), `LAYER_MAU_BYLAYER` (1 = bắt buộc màu ByLayer), `MAX_LOI_MOI_MA`, `DUNG_SAI_KICH_THUOC` (mm), `LAYER_BO_QUA` (wildcard, vd `DEFPOINTS,KT_CHECK,*|*`).
+Tên có dấu ghi như AutoLISP ANSI thấy (byte codepage / `\U+XXXX`), file ANSI – xem `docs/TEMPLATE_ANALYSIS.md`.
+SETTING quan trọng: `CAO_CHU_DIM` (chữ dim trên giấy), `KHUNG_TRUNGTEN_LIENTIEP`, `CAO_CHU_GIAY` (vd `1.8,2.0,2.5,3.5,5.0` mm giấy), `TY_LE_CHO_PHEP` (`20,25,50,100,200`), `LAYER_MAU_BYLAYER` (1 = bắt buộc màu ByLayer), `MAX_LOI_MOI_MA`, `DUNG_SAI_KICH_THUOC` (mm), `LAYER_BO_QUA` (wildcard, vd `DEFPOINTS,KT_CHECK,*|*`).

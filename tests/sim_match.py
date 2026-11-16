@@ -91,7 +91,7 @@ def build_sequences(unit, issues):
                         sp = [seg[i + 1][1] - seg[i][1] for i in range(len(seg) - 1)]
                         med = median(sp) if sp else 0.0
                         gap = c - seg[-1][1]
-                        if med > 0 and gap > 1.5 * med:
+                        if (med > 0 and gap > 1.5 * med) or (len(seg) >= 2 and nm == seg[0][0]):
                             segs.append(seg)  # ban ve thu 2 dat canh: tach doan
                             seg = [(nm, c)]
                         else:

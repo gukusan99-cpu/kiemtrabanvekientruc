@@ -13,6 +13,9 @@
 ;;;   TEXT-RONG    GOIY    chu rong (chi co khoang trang)
 ;;;   TEXT-WIDTH   GOIY    width factor cua chu khac width factor chuan cua style
 ;;;   TEXT-FONTMAT CANHBAO khong tim thay file font .shx (1 dong/style)
+;;;   TEXT-STYLECAO CANHBAO textstyle chuan nhung CHIEU CAO CO DINH khac chuan (vd '0 ARIAL 2.5' = 250
+;;;                 trong template; ban ve dat 0 hoac 2.5 -> chu moi go se sai co; dim dung style co
+;;;                 chieu cao co dinh se BO QUA DIMTXT)
 ;;;
 ;;; Pham vi: TEXT/MTEXT/ATTDEF trong Model va cac Layout (khong duyet chu
 ;;; nam trong dinh nghia block / ATTRIB).
@@ -163,7 +166,7 @@
       (setq i 0)
       (repeat (sslength ss)
         (setq en (ssname ss i) i (1+ i) ed (entget en '("AcadAnnotative"))
-              typ (kt:dxf 0 ed) sty (kttxt:style-of ed) up (strcase sty)
+              typ (kt:dxf 0 ed) sty (kttxt:style-of ed) up (kt:ukey sty)
               lay (cond ((kt:dxf 8 ed)) ("0")))
         (if (not (and skip (kt:wcmatch-any lay skip)))
           (progn
@@ -250,7 +253,7 @@
                         (findfile (strcat (kttxt:fname f) ".shx")))))
 )
 
-(defun kttxt:chk-fonts (/ tb nm fl row sf act sbf abf en diffs miss e)
+(defun kttxt:chk-fonts (/ tb nm fl row sf act sbf abf en diffs miss e sh ah)
   (setq tb (tblnext "STYLE" T))
   (while tb
     (setq nm (kt:dxf 2 tb) fl (cond ((kt:dxf 70 tb)) (0)))
@@ -259,7 +262,7 @@
              (not (vl-string-search "|" nm)))
       (progn
         (setq act (kttxt:stylefont nm)
-              en  (cdr (assoc (strcase nm) *KT:TXFIRST*))
+              en  (cdr (assoc (kt:ukey nm) *KT:TXFIRST*))
               diffs nil miss nil)
         ;; --- so font voi chuan ---
         ;; TEXTSTYLE|ten|font file|bigfont|chieu cao co dinh|width factor
@@ -275,6 +278,14 @@
                                 diffs)))
             (if (and (/= sbf "") (/= (kttxt:fkey sbf) (kttxt:fkey (cadr act))))
               (setq diffs (cons (strcat "bigfont '" (cadr act) "' (chuan '" sbf "')") diffs)))
+            ;; chieu cao co dinh (cot 4) - chi so khi file chuan co gia tri
+            (setq sh (kt:num (nth 3 row)) ah (cond ((kt:dxf 40 tb)) (0.0)))
+            (if (and sh (> (abs (- sh ah)) (max 1e-6 (* 0.005 (max sh ah)))))
+              (kt:add "TEXT" "TEXT-STYLECAO" "CANHBAO"
+                      (strcat "Textstyle '" nm "' co chieu cao co dinh " (kttxt:fmt ah)
+                              " (chuan " (kttxt:fmt sh) ")"
+                              (if (or (= sh 0) (= ah 0)) "" " - chu/dim dung style nay sai co"))
+                      en nil nil))
             (if diffs
               (kt:add "TEXT" "TEXT-FONT" "LOI"
                       (strcat "Textstyle '" nm "' khac chuan: " (kt:join (reverse diffs) "; ")
@@ -298,7 +309,7 @@
 
 ;;; ---------- Chay ----------
 (defun kttxt:prep ()
-  (setq *KT:TXSTD* (kt:cfg-names "TEXTSTYLE"))
+  (setq *KT:TXSTD* (kt:cfg-keys "TEXTSTYLE"))
   T
 )
 

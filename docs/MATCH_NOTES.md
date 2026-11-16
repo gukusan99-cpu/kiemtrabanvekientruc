@@ -7,16 +7,19 @@
 
 ## Trục (KHOP-TRUC / THUTU / TRUNGTRUC / DIMTRUC / TONG)
 - Nên khai báo `BLOCK|<ten block truc>|TRUC|<tag ten truc>`. Không khai báo thì tool tự nhận: block có **đúng 1 attribute** giá trị `1`–`999` hoặc `A`–`ZZ` (cho phép `'`), định nghĩa block có **CIRCLE**. Trục kiểu `1A`, `A1` chỉ nhận khi đã khai báo.
-- **Điểm chèn block trục phải là tâm vòng tròn, nằm trên đường trục** (tọa độ trục = điểm chèn).
+- **Điểm chèn block trục phải nằm trên đường trục** (tâm vòng tròn, hoặc đuôi ký hiệu như block `TRỤC` của công ty:
+  điểm chèn = đầu đuôi, vòng tròn ở phía trên cùng X) – tọa độ trục = điểm chèn.
 - Ký hiệu trục cùng hàng (cùng Y ± ½ đường kính, hoặc cùng X) tạo thành 1 dãy. Ký hiệu ở 2 đầu trục cùng tên là bình thường. Trục số và trục chữ xét riêng.
 - Chỉ bản vẽ MẶT BẰNG / MẶT ĐỨNG / MẶT CẮT tham gia bình chọn (chi tiết vẽ ngắt trục không bị so; `KHOP_TRUC_MOI_BAN_VE=1` để xét tất cả). Bản vẽ có mọi cặp trục = k × bản vẽ khác (k = 2, 2.5, 4, 5, 10, 20…: chi tiết phóng to) → GOIY `KHOP-PHONGTO`, bỏ khỏi bình chọn; dim trong đó so với khoảng cách × DIMLFAC.
 - So khoảng cách mọi cặp trục giữa các bản vẽ, bình chọn theo đa số; bản vẽ lệch đa số bị báo trên các cặp liền kề của nó. Chỉ 2 bản vẽ mà khác nhau → báo cả hai.
-- 2 bản vẽ đặt cạnh nhau trong 1 khung (kể cả mặt bằng mái chỉ có trục 2..4): tách đúng khi khoảng hở giữa chúng > 1,5 × nhịp trục trung vị; nếu không sẽ báo nhầm TRUNGTRUC.
-- Dim trục: chỉ dim thẳng ngang/dọc có điểm 13/14 trùng tọa độ trục (± max(2×dung sai, 5mm)). Giá trị hiển thị so với khoảng cách trục × DIMLFAC (chấp nhận ghi theo m: `3.6`). Lỗi bắt: số ghi đè sai.
+- 2 bản vẽ đặt cạnh nhau trong 1 khung (kể cả mặt bằng mái chỉ có trục 2..4): tách đúng khi khoảng hở giữa chúng > 1,5 × nhịp trục trung vị, **hoặc** tên lặp = tên ĐẦU dãy (6,7 | 6,7 – 2 chi tiết WC cùng trục); nếu không sẽ báo nhầm TRUNGTRUC.
+- Dim trục: chỉ dim thẳng ngang/dọc có điểm 13/14 trùng tọa độ trục (± max(2×dung sai, 5mm)). Giá trị hiển thị (= độ dài hình học 13/14 × DIMLFAC; mã 42 của AutoCAD đã nhân DIMLFAC nên không dùng) so với khoảng cách trục × DIMLFAC (chấp nhận ghi theo m: `3.6`). Lỗi bắt: số ghi đè sai.
 
 ## Cao độ (KHOP-CAODO-VITRI / CAODO / CAODO-MB)
 - Nên khai báo `BLOCK|<ten block cao do>|CAODO|<tag gia tri>`; giá trị chấp nhận `+3.600`, `3.600`, `3600` (mm), `%%p0.000`, `+3,600`. Không khai báo: tool đọc attribute/TEXT/MTEXT dạng `[+|-|±]x.xxx` (bắt buộc có dấu, hoặc là `0.000`), vd `COS +3.600`.
-- **Điểm chèn block cao độ = đỉnh tam giác nằm đúng trên cao độ đó.** TEXT cao độ: mọi text cùng nằm trên vạch 1 khoảng như nhau (tool so text với text, block với block nên khoảng lệch tự triệt tiêu).
+- **Điểm chèn block cao độ = đỉnh tam giác nằm đúng trên cao độ đó**, hoặc khai báo điểm gốc trong block ở cột cuối:
+  `BLOCK|COTCAODO|CAODO|COTE||-88.25,-49.03` (block công ty: điểm chèn cao hơn vạch 49 × scale; cốt âm chèn mirror +
+  xoay 180°) – KTKHOP đổi điểm gốc qua scale/xoay/mirror của từng lần chèn. KTMAU tự dò (đỉnh tam giác SOLID/LINE). TEXT cao độ: mọi text cùng nằm trên vạch 1 khoảng như nhau (tool so text với text, block với block nên khoảng lệch tự triệt tiêu).
 - Vị trí: mặc định chỉ xét **block** cao độ (TEXT đặt cách vạch tùy tay → `KHOP_CAODO_TEXT=1` mới xét). Ký hiệu gom theo "mốc ngầm định" Y − 1000×giá trị: cụm chứa ±0.000 là mốc; ký hiệu ngoài cụm mốc = sai vị trí (bắt cả lỗi copy ký hiệu +7.200 xuống sàn +3.600 quên sửa số). Cụm ≥ 2 giá trị lệch mốc > 1 m = hình vẽ khác xếp chồng (không ghi ±0.000) → bỏ qua. Mọi ký hiệu sai cùng hệ số phóng to tròn → GOIY `KHOP-PHONGTO`.
 - Giữa các mặt đứng/mặt cắt: cặp giá trị lệch trong (1mm, `CAODO_LECH_NGHI`] mà bản kia không có (vd +7.200 / +7.150) → CANHBAO nếu 1 giá trị có trên mặt bằng (cốt sàn), ngược lại GOIY (bậu cửa, lanh tô, đáy dầm). Cao độ đỉnh khác nhau thường HỢP LỆ (mặt cắt qua tum thang) → chỉ báo GOIY khi `KHOP_CAODO_DINH=1`.
 - Cao độ trên mặt bằng không có trên mặt cắt: mặc định chỉ GOIY khi GẦN (≤ `CAODO_LECH_NGHI`) một cao độ mặt cắt (`KHOP_CAODO_MB`: 0 tắt, 1 mặc định, 2 mọi giá trị).

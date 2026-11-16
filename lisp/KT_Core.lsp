@@ -314,10 +314,30 @@
         (+ (cadr ins) (+ (* x (sin ang)) (* y (cos ang)))))
 )
 
-(defun kt:ent-pts (ed depth / typ pts r p b tb a ins)
+(defun kt:ent-pts (ed depth / typ pts r p b tb a ins u v sz on)
   ;; cac diem dac trung cua 1 doi tuong (du phong khi khong co ActiveX)
   (setq typ (kt:dxf 0 ed))
   (cond
+    ;; IMAGE / WIPEOUT: 11/12 la VECTOR 1 pixel, 13 = so pixel (khong phai diem)
+    ((and (member typ '("IMAGE" "WIPEOUT")) (setq p (kt:dxf 10 ed))
+          (setq u (kt:dxf 11 ed)) (setq v (kt:dxf 12 ed)) (setq sz (kt:dxf 13 ed)))
+     (setq u (list (* (car u) (car sz)) (* (cadr u) (car sz)))
+           v (list (* (car v) (cadr sz)) (* (cadr v) (cadr sz))))
+     (list (kt:2d p) (list (+ (car p) (car u)) (+ (cadr p) (cadr u)))
+           (list (+ (car p) (car v)) (+ (cadr p) (cadr v)))
+           (list (+ (car p) (car u) (car v)) (+ (cadr p) (cadr u) (cadr v)))))
+    ;; ELLIPSE: 11 = vector ban truc lon (tuong doi tam) -> hop bao bao ngoai
+    ((and (= typ "ELLIPSE") (setq p (kt:dxf 10 ed)) (setq u (kt:dxf 11 ed)))
+     (setq r (distance '(0.0 0.0) (kt:2d u)))
+     (list (list (- (car p) r) (- (cadr p) r)) (list (+ (car p) r) (+ (cadr p) r))))
+    ;; HATCH: 10 dau = diem cao do (0,0,z); diem seed sau ma 98 -> chi lay dinh bien (10/11)
+    ((= typ "HATCH")
+     (foreach g ed
+       (cond ((= (car g) 98) (setq on 'END))
+             ((and (= (car g) 10) (null on)) (setq on T))          ; bo diem cao do
+             ((and (eq on T) (member (car g) '(10 11)) (listp (cdr g)) (numberp (cadr g)))
+              (setq pts (cons (cdr g) pts)))))
+     pts)
     ((member typ '("CIRCLE" "ARC"))
      (setq p (kt:dxf 10 ed) r (cond ((kt:dxf 40 ed)) (0.0)))
      (if p (list (list (- (car p) r) (- (cadr p) r)) (list (+ (car p) r) (+ (cadr p) r)))))
@@ -560,6 +580,11 @@
              (setq h (kt:hex (substr s (+ i 3) 4))))
       (setq c h i (+ i 7))
       (setq c (ascii (substr s i 1)) i (1+ i)))
+    ;; may Windows codepage 1258: A( D- O+ U+ la 1 byte -> doi ve ma Unicode (khop file chuan cp1252)
+    (if (and (> c 191) (< c 256) (kt:cp1258-p)
+             (setq h (assoc c '((195 . 258) (227 . 259) (208 . 272) (240 . 273)
+                                (213 . 416) (245 . 417) (221 . 431) (253 . 432)))))
+      (setq c (cdr h)))
     (setq c (kt:uup c)
           res (strcat res (if (> c 255) (strcat "\\U+" (kt:hex4 c)) (chr c)))))
   res
@@ -643,6 +668,58 @@
   (vl-remove "" (mapcar '(lambda (r) (kt:str (car r))) (kt:cfg "KHUNG")))
 )
 
+(defun kt:blk-border (nm / it e ed pts b best ar all lb)
+  ;; vien khung = LWPOLYLINE (>= 4 dinh) co hop bao lon nhat trong dinh nghia block, toa do so voi
+  ;; diem goc block. Chi nhan khi vien >= 50% hop bao cua moi LINE/LWPOLYLINE trong block (khung ve
+  ;; vien bang LINE, polyline lon nhat chi la o tieu de -> nil). nil neu khong co. Cache *KT:BBRD*.
+  (if (setq it (assoc (strcase (kt:str nm)) *KT:BBRD*))
+    (cdr it)
+    (progn
+      (if (and nm (setq e (tblobjname "BLOCK" nm)))
+        (progn
+          (setq b (cond ((kt:dxf 10 (entget e))) ('(0.0 0.0 0.0))) e (entnext e))
+          (while e
+            (setq ed (entget e))
+            (cond
+              ((or (null ed) (= (kt:dxf 0 ed) "ENDBLK")) (setq e nil))
+              (T
+               (cond
+                 ((= (kt:dxf 0 ed) "LINE")
+                  (setq all (cons (kt:dxf 10 ed) (cons (kt:dxf 11 ed) all))))
+                 ((= (kt:dxf 0 ed) "LWPOLYLINE")
+                  (setq pts nil)
+                  (foreach g ed (if (= (car g) 10) (setq pts (cons (cdr g) pts))))
+                  (setq all (append pts all))
+                  (if (and (>= (length pts) 4) (setq pts (kt:pts-box pts))
+                           (> (setq ar (* (- (car (cadr pts)) (car (car pts))) (- (cadr (cadr pts)) (cadr (car pts)))))
+                              (if best (car best) 0.0)))
+                    (setq best (cons ar pts)))))
+               (setq e (entnext e)))))
+          (if (and best (setq lb (kt:pts-box all))
+                   (< (car best) (* 0.5 (* (- (car (cadr lb)) (car (car lb))) (- (cadr (cadr lb)) (cadr (car lb)))))))
+            (setq best nil))
+          (if best
+            (setq best (list (list (- (car (cadr best)) (car b)) (- (cadr (cadr best)) (cadr b)))
+                             (list (- (car (caddr best)) (car b)) (- (cadr (caddr best)) (cadr b)))))))
+        (setq best nil))
+      (setq *KT:BBRD* (cons (cons (strcase (kt:str nm)) best) *KT:BBRD*))
+      best))
+)
+
+(defun kt:frame-box (en / ed br)
+  ;; vung khung ten: vien LWPOLYLINE lon nhat cua block (kt:blk-border) doi qua scale/xoay INSERT -
+  ;; khong tinh attribute / anh / chu tran ra ngoai vien (hop bao ActiveX cua INSERT co tinh, ban
+  ;; du phong DXF tren VinaCAD con phong to theo vector IMAGE). Khong co vien -> hop bao ca block.
+  (setq ed (entget en))
+  (if (setq br (kt:blk-border (kt:dxf 2 ed)))
+    (kt:pts-box
+      (mapcar '(lambda (q)
+                 (kt:xform q (kt:dxf 10 ed) (cond ((kt:dxf 41 ed)) (1.0)) (cond ((kt:dxf 42 ed)) (1.0))
+                           (cond ((kt:dxf 50 ed)) (0.0))))
+              (kt:box-corners br)))
+    (kt:box en))
+)
+
 (defun kt:frames (/ names flt raw res en ed row bx sct tsc agree disagree sc)
   ;; tim tat ca khung ten (moi khong gian), luu vao *KT:FRAMES*
   ;; ban ghi: (ename space minpt maxpt scale sohieu ten scale-ghi-trong-khung)
@@ -654,7 +731,7 @@
       (setq flt (strcat (kt:join (mapcar 'kt:wcesc names) ",") ",`*U*"))
       (foreach en (kt:ss-all (list '(0 . "INSERT") (cons 2 flt)))
         (if (and (setq row (kt:cfg-row "KHUNG" (kt:effname en)))
-                 (setq bx (kt:box en)))
+                 (setq bx (kt:frame-box en)))
           (progn
             (setq ed  (entget en)
                   ;; KHUNG|ten block|tag so hieu|tag ten ban ve|tag ty le|ty le goc
@@ -755,7 +832,7 @@
 )
 
 (defun kt:reset-cache ()
-  (setq *KT:FRAMES* nil *KT:VPS* nil *KT:BEXT* nil)
+  (setq *KT:FRAMES* nil *KT:VPS* nil *KT:BEXT* nil *KT:BBRD* nil)
 )
 
 ;;; ---------- Danh sach loi ----------

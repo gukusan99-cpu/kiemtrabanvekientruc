@@ -10,7 +10,9 @@
 ;;;                    (CANHBAO) tag khac de trong trong khi >= 1/2 khung khac da dien
 ;;;                              (bo qua tag khop SETTING KHUNG_TAG_BO_QUA, vd NGAY*,GHICHU)
 ;;;   KHUNG-TRUNGSO    (LOI)     2 khung cung so hieu
-;;;   KHUNG-TRUNGTEN   (CANHBAO) 2 khung cung ten ban ve (gop TENBANVE1 + TENBANVE2...)
+;;;   KHUNG-TRUNGTEN   (CANHBAO) 2 khung cung ten ban ve (gop TENBANVE1 + TENBANVE2... / tag "A+B");
+;;;                              bo nhieu to so hieu LIEN TIEP (C/01..C/07) khong bao (SETTING
+;;;                              KHUNG_TRUNGTEN_LIENTIEP=1 -> GOIY)
 ;;;   KHUNG-NHAYSO     (GOIY)    so hieu nhay coc trong cung tien to (KT-02 -> KT-04);
 ;;;                              so >= 3 chu so (A-101, A-201) xet rieng tung tram
 ;;;   KHUNG-TYLE       (LOI)     ty le ghi khac ty le thuc (Model: scale X x ty le goc;
@@ -138,7 +140,7 @@
 (defun ktsh:bname (en ed / nm)
   (setq nm (cond ((kt:dxf 2 ed)) ("")))
   (if (wcmatch nm "`**") (setq nm (cond ((kt:effname en)) (nm))))
-  (strcase nm)
+  (kt:ukey nm)
 )
 
 ;;; ---------- khung ten ----------
@@ -160,7 +162,8 @@
   ;; ten ban ve day du: tag ten + cac tag cung goc (TENBANVE1 "MAT BANG" + TENBANVE2 "TANG 1")
   (setq row (kt:cfg-row "KHUNG" (kt:effname (car f)))
         tg  (if row (strcase (kt:str (nth 2 row))) ""))
-  (if (/= tg "")
+  ;; "TEN_BAN_VE+TEN_CONG_TRINH": kt:frames da noi cac dong (kt:attval)
+  (if (and (/= tg "") (not (vl-string-search "+" tg)))
     (progn
       (setq base (ktsh:stripdig tg))
       (foreach a (kt:attribs (car f))
@@ -193,7 +196,7 @@
 ;;; - tag so hieu / ten / ty le (muc KHUNG) de trong -> LOI
 ;;; - tag khac de trong: chi CANHBAO khi >= 1/2 so khung DA DIEN tag do (tag de trong o
 ;;;   moi khung = o tuy chon nhu LAN SUA, GHI CHU -> khong bao)
-(defun ktsh:chk-thieu (frames / skip stat it row core empt emp2)
+(defun ktsh:chk-thieu (frames / skip stat it row core empt emp2 subs)
   (setq skip (kt:cfg-list "KHUNG_TAG_BO_QUA"))
   ;; stat: (TAG so-lan-co so-lan-da-dien)
   (foreach f frames
@@ -203,11 +206,14 @@
                              (+ (if it (caddr it) 0) (if (= (cdr a) "") 0 1)))
                        (if it (vl-remove it stat) stat)))))
   (foreach f frames
+    ;; tag ten "A+B": A bat buoc, B (dong 2 cua ten ban ve) tuy chon
     (setq row  (kt:cfg-row "KHUNG" (kt:effname (car f)))
-          core (mapcar 'strcase (vl-remove "" (mapcar 'kt:str (list (nth 1 row) (nth 2 row) (nth 3 row)))))
+          core (vl-remove "" (mapcar 'kt:tag1 (list (nth 1 row) (nth 2 row) (nth 3 row))))
+          subs (mapcar 'strcase (cdr (kt:split (kt:str (nth 2 row)) "+")))
           empt nil emp2 nil)
     (foreach a (kt:attribs (car f))
-      (if (and (= (cdr a) "") (not (and skip (kt:wcmatch-any (car a) skip))))
+      (if (and (= (cdr a) "") (not (member (car a) subs))
+               (not (and skip (kt:wcmatch-any (car a) skip))))
         (cond ((member (car a) core) (setq empt (cons (car a) empt)))
               ((and (setq it (assoc (car a) stat)) (> (caddr it) 0) (>= (* 2 (caddr it)) (cadr it)))
                (setq emp2 (cons (car a) emp2))))))
@@ -223,7 +229,24 @@
 )
 
 ;;; ---------- KHUNG-TRUNGSO / KHUNG-TRUNGTEN ----------
-(defun ktsh:chk-trung (frames)
+(defun ktsh:series-p (fs / ns pre r ok)
+  ;; T neu cac khung cung ten co so hieu LIEN TIEP cung tien to (bo nhieu to: C/01..C/07)
+  (foreach f fs
+    (setq r (ktsh:splitnum (nth 5 f)))
+    (if (and r (/= (cadr r) "") (or (null pre) (= (car r) pre)))
+      (setq pre (car r) ns (cons (atoi (cadr r)) ns))
+      (setq pre 'BAD)))
+  (if (and (/= pre 'BAD) ns (= (length ns) (length fs)))
+    (progn
+      (setq ns (ktsh:msort ns '<) ok T)
+      (while (cdr ns)
+        (if (> (- (cadr ns) (car ns)) 1) (setq ok nil))
+        (setq ns (cdr ns)))
+      ok))
+)
+
+(defun ktsh:chk-trung (frames / ser)
+  (setq ser (fix (kt:cfg-num "KHUNG_TRUNGTEN_LIENTIEP" 0)))
   (foreach g (ktsh:group frames 5)
     (if (cddr g)
       (kt:add "KHUNG" "KHUNG-TRUNGSO" "LOI"
@@ -231,9 +254,10 @@
                       " khung ten (ten: "
                       (kt:join (mapcar '(lambda (f) (kt:str (nth 6 f))) (cdr g)) " / ") ")")
               (mapcar 'car (cdr g)) nil nil)))
+  ;; trung ten: bo nhieu to lien tiep (quy cach cong ty) -> bo qua (KHUNG_TRUNGTEN_LIENTIEP=1: GOIY)
   (foreach g (ktsh:group frames 6)
-    (if (cddr g)
-      (kt:add "KHUNG" "KHUNG-TRUNGTEN" "CANHBAO"
+    (if (and (cddr g) (not (and (= ser 0) (ktsh:series-p (cdr g)))))
+      (kt:add "KHUNG" "KHUNG-TRUNGTEN" (if (ktsh:series-p (cdr g)) "GOIY" "CANHBAO")
               (strcat "Ten ban ve \"" (kt:str (nth 6 (cadr g))) "\" bi trung o "
                       (itoa (length (cdr g))) " khung ten (copy quen sua ten?): "
                       (kt:join (mapcar 'ktsh:flabel (cdr g)) ", "))
@@ -619,7 +643,7 @@
 (defun ktsh:chk-thamchieu (frames texts dm / cmap ed r atts main key reft ref shkeys prefs st keys titles kv role nk)
   (foreach row (kt:cfg "BLOCK")
     (if (member (strcase (kt:str (cadr row))) '("MATCAT" "CHITIET"))
-      (setq cmap (cons (list (strcase (kt:str (car row))) (strcase (kt:str (cadr row)))
+      (setq cmap (cons (list (kt:ukey (car row)) (strcase (kt:str (cadr row)))
                              (strcase (kt:str (caddr row))) (strcase (kt:str (cadddr row))))
                        cmap))))
   (if (null cmap)
@@ -688,6 +712,15 @@
   res
 )
 
+(defun ktsh:noplot (/ d res)
+  ;; ten layer khong in (290 = 0), da thoat ky tu wildcard
+  (setq d (tblnext "LAYER" T))
+  (while d
+    (if (and (= (kt:dxf 290 d) 0) (kt:dxf 2 d)) (setq res (cons (kt:wcesc (kt:dxf 2 d)) res)))
+    (setq d (tblnext "LAYER")))
+  res
+)
+
 (defun ktsh:chk-ngoai (frames / mf boxes fens pat umn umx cw ch ed typ p key cells cell n lay tot shown)
   (setq mf (vl-remove-if-not '(lambda (f) (= (nth 1 f) "Model")) frames))
   (if mf
@@ -696,7 +729,10 @@
             boxes (append (mapcar '(lambda (f) (list (nth 2 f) (nth 3 f))) mf)
                           (vl-remove-if '(lambda (b) (or (null (car b)) (null (cadr b))))
                                         (mapcar '(lambda (v) (list (nth 3 v) (nth 4 v))) (kt:viewports))))
-            pat   (strcase (kt:join (cons (kt:wcesc *KT:LAYER*) (kt:cfg-list "LAYER_BO_QUA")) ","))
+            ;; bo qua layer KHONG IN (plot = 0, vd KCS_Plotter / Defpoints): khong anh huong ban in
+            pat   (strcase (kt:join (append (list (kt:wcesc *KT:LAYER*)) (kt:cfg-list "LAYER_BO_QUA")
+                                            (ktsh:noplot))
+                                    ","))
             cw    (/ (apply '+ (mapcar '(lambda (f) (- (car (nth 3 f)) (car (nth 2 f)))) mf)) (float (length mf)))
             ch    (/ (apply '+ (mapcar '(lambda (f) (- (cadr (nth 3 f)) (cadr (nth 2 f)))) mf)) (float (length mf)))
             umn   (list (apply 'min (mapcar '(lambda (f) (car (nth 2 f))) mf))

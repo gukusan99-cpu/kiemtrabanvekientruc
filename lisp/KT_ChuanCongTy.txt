@@ -21,11 +21,11 @@
 ;   Thong ke tu template (chu ngoai block, style cong ty, gia tri >= 10 lan; bo to bia va khung 1/35):
 ;   0.75 ten do noi that, 1.25 dien tich phong, 1.8 ten phong, 2.0/2.2/2.5 ghi chu, 3.3 bang thong ke
 ;   cua, 4.0/5.0 ten hinh ve. Them 10 = tieu de to bia.
-SETTING|CAO_CHU_GIAY|0.75,1.25,1.80,2,2.20,2.50,3.35,4,5,10
+SETTING|CAO_CHU_GIAY|0.75,1.25,1.8,2,2.2,2.5,3.35,4,5,10
 ; CAO_CHU_DIM: chieu cao chu DIM tren giay (mm) = DIMTXT hieu dung x (DIMSCALE neu >0, khong thi 1)
 ;   / ty le khung. Cong ty de DIMSCALE=0 va DIMTXT theo don vi ban ve: DG 1-100 (200) 150 -> 1.5mm,
 ;   DG 1-30 (60) 60 -> 2.0mm o 1/30, TL 1-60 (120) 120 -> 2.0mm o 1/60. Lech <= 25% -> CANHBAO, hon -> LOI.
-SETTING|CAO_CHU_DIM|1.50,2
+SETTING|CAO_CHU_DIM|1.5,2
 ; TY_LE_CHO_PHEP: mau so ty le duoc phep. Template dung: 1/20, 1/30, 1/35, 1/60, 1/100.
 SETTING|TY_LE_CHO_PHEP|1,2,5,10,15,20,25,30,35,50,60,75,100,150,200,250,500
 ; LAYER_MAU_BYLAYER: 1 = doi tuong bat buoc mau/linetype ByLayer.
@@ -70,8 +70,8 @@ LAYER|Defpoints|1|Continuous|-3|0
 ; Luu y: 'DG 1-100 (200)' ten ghi (200) nhung DIMTXT = 150 (chu 1.5mm).
 DIMSTYLE|DG 1-100 (200)|0|1|150|60|mb tret$0$DIMENSION|0|0
 DIMSTYLE|DG 1-30 (60)|0|1|60|20|mb tret$0$DIMENSION|0|0
-DIMSTYLE|DG 1-30 (60) x2|0|0.500|60|20|mb tret$0$DIMENSION|0|0
-DIMSTYLE|DG 1-30 (60) x4|0|0.250|60|20|mb tret$0$DIMENSION|0|0
+DIMSTYLE|DG 1-30 (60) x2|0|0.5|60|20|mb tret$0$DIMENSION|0|0
+DIMSTYLE|DG 1-30 (60) x4|0|0.25|60|20|mb tret$0$DIMENSION|0|0
 DIMSTYLE|TL 1-60 (120)|0|1|120|40|mb tret$0$DIMENSION|0|0
 
 ; ---------- TEXTSTYLE: ten|font|bigfont|cao co dinh|width ----------
@@ -82,9 +82,9 @@ TEXTSTYLE|0 ARIAL 2|arial.ttf||200|1
 TEXTSTYLE|0 ARIAL 2.5|arial.ttf||250|1
 TEXTSTYLE|0 ARIAL TÊN|arialbd.ttf||400|1
 TEXTSTYLE|0_T_Arial|arial.ttf||2|1
-TEXTSTYLE|0_T_Arial 1.2|arial.ttf||1.200|1
+TEXTSTYLE|0_T_Arial 1.2|arial.ttf||1.2|1
 TEXTSTYLE|0_T_Arial Bold 2|arialbd.ttf||2|1
-TEXTSTYLE|0_T_Arial Bold 2.5|arialbd.ttf||2.500|1
+TEXTSTYLE|0_T_Arial Bold 2.5|arialbd.ttf||2.5|1
 TEXTSTYLE|Arial|arial.ttf||0|1
 TEXTSTYLE|bold|.VnAvantH||0|1
 TEXTSTYLE|mb tret$0$DIMENSION|VNI-Helve-Condense||0|1
@@ -102,7 +102,7 @@ KHUNG|KHUNGT43||||54
 
 ; ---------- BLOCK: ten|vai tro|tag chinh|tag phu (so ban ve tham chieu)|diem goc x,y ----------
 ; TRUC: diem chen = DUOI duoi cua ky hieu (nam tren duong truc), vong tron o phia tren 400 x scale.
-; CAODO: diem goc = dinh tam giac tren vach cao do, trong block o (x,y) cot 6; diem chen KHONG nam
+; CAODO: diem goc = dinh tam giac tren vach cao do = (x,y) trong block o truong cuoi; diem chen KHONG nam
 ;   tren vach (lech 49 x scale) -> KTKHOP doi diem goc qua scale/mirror/xoay cua tung lan chen.
 BLOCK|TR\U+1EE4C|TRUC|A
 BLOCK|COTCAODO|CAODO|COTE||-88.25,-49.03

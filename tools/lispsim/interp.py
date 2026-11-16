@@ -22,8 +22,11 @@ def wrap32(i):
     return i - 0x100000000 if i >= 0x80000000 else i
 
 
+_NUMT = (int, float)
+
+
 def isnum(x):
-    return (isinstance(x, (int, float))) and not isinstance(x, bool)
+    return type(x) in _NUMT
 
 
 class Interp:
@@ -81,28 +84,57 @@ class Interp:
 
     # ------------------------------------------------------------ eval
     def ev(self, x):
-        if isinstance(x, Sym):
+        # nong nhat cua trinh gia lap: dung type() thay isinstance, goi Subr truc tiep
+        t = type(x)
+        if t is Sym:
             return x.value
-        if isinstance(x, Cons):
-            head = x.car
-            if isinstance(head, Sym):
-                sf = self.special.get(head)
-                if sf is not None:
-                    return sf(x)
-                f = head.value
-                if f is None:
-                    raise self._undef(head, x)
-            elif isinstance(head, Cons) and head.car is self.LAMBDA:
-                f = self._mk_lambda(head)
+        if t is not Cons:
+            return x
+        head = x.car
+        if type(head) is Sym:
+            sf = self.special.get(head)
+            if sf is not None:
+                return sf(x)
+            f = head.value
+            if f is None:
+                raise self._undef(head, x)
+        elif type(head) is Cons and head.car is self.LAMBDA:
+            f = self._mk_lambda(head)
+        else:
+            f = self.ev(head)
+        args = []
+        a = x.cdr
+        ev = self.ev
+        while type(a) is Cons:
+            c = a.car
+            tc = type(c)
+            if tc is Sym:
+                args.append(c.value)
+            elif tc is Cons:
+                args.append(ev(c))
             else:
-                f = self.ev(head)
-            args = []
-            a = x.cdr
-            while isinstance(a, Cons):
-                args.append(self.ev(a.car))
-                a = a.cdr
-            return self.call(f, args, x)
-        return x
+                args.append(c)
+            a = a.cdr
+        if type(f) is Subr:
+            n = len(args)
+            if n >= f.amin and (f.amax is None or n <= f.amax):
+                try:
+                    return f.fn(args)
+                except LispError as e:
+                    if e.form is None:
+                        e.form = x
+                    raise
+                except RecursionError:
+                    raise self._err("stack overflow (lispsim: Python recursion)", x, "sim")
+                except Exception as ex:  # bug cua trinh gia lap
+                    raise self._internal(f, x, ex)
+        return self.call(f, args, x)
+
+    def _internal(self, f, form, ex):
+        import traceback
+        msg = "SIM-INTERNAL %s: %s: %s" % (f.name, type(ex).__name__, ex)
+        self.sim_bugs.append((msg, list(self.stack), self.where(form), traceback.format_exc()))
+        return self._err(msg, form, "sim")
 
     unsupported_prefixes = ()
 
@@ -145,11 +177,7 @@ class Interp:
             except RecursionError:
                 raise self._err("stack overflow (lispsim: Python recursion)", form, "sim")
             except Exception as ex:  # bug cua trinh gia lap
-                import traceback
-                msg = "SIM-INTERNAL %s: %s: %s" % (f.name, type(ex).__name__, ex)
-                self.sim_bugs.append((msg, list(self.stack), self.where(form),
-                                      traceback.format_exc()))
-                raise self._err(msg, form, "sim")
+                raise self._internal(f, form, ex)
         if isinstance(f, USubr):
             return self.call_usubr(f, args, form)
         if isinstance(f, (Sym, Cons)):

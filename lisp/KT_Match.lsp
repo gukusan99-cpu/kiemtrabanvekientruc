@@ -37,14 +37,15 @@
 ;;;  4. Ky hieu truc: block vai tro TRUC trong muc BLOCK (tag chinh = ten truc).
 ;;;     Neu KHONG cau hinh TRUC: tu nhan block co dung 1 attribute, gia tri la
 ;;;     1-3 chu so hoac 1-2 chu cai (vd 1, 12, A, AB, A'), dinh nghia block co CIRCLE.
-;;;     Vi tri truc = DIEM CHEN cua block (tam vong tron, nam tren duong truc).
+;;;     Vi tri truc = DIEM CHEN cua block (tam vong tron hoac duoi ky hieu, nam tren duong truc).
 ;;;     Truc so (1,2,3) va truc chu (A,B,C) xet rieng. Cac ky hieu cung ten o 2 dau
 ;;;     truc la binh thuong. Hang ky hieu = cac ky hieu cung Y (xep ngang, do theo X)
 ;;;     hoac cung X (xep doc, do theo Y), sai lech <= 1/2 kich thuoc ky hieu.
 ;;;  5. Cao do: block vai tro CAODO (gia tri "+3.600", "3.600", "3600" mm...) hoac
 ;;;     neu khong cau hinh: attribute/TEXT/MTEXT dang "+3.600" "-0.450" "%%p0.000"
 ;;;     "+3,600" "COS +3.600" (bat buoc co dau +/-/+- hoac la 0.000, 3 so le).
-;;;     Diem chen block cao do = dinh tam giac nam tren cao do do. Ky hieu block va
+;;;     Diem chen block cao do = dinh tam giac nam tren cao do do, hoac "diem goc x,y" khai bao o
+;;;     cot cuoi dong BLOCK (doi qua scale/xoay/mirror tung lan chen). Ky hieu block va
 ;;;     TEXT duoc xet rieng (TEXT nam tren vach mot khoang co dinh -> tu triet tieu).
 ;;;     Moc = ky hieu gia tri 0 (co the nhieu moc neu nhieu mat dung xep chong) hoac
 ;;;     ky hieu gia tri nho nhat.
@@ -295,9 +296,25 @@
 
 ;;; ---------- thu thap ----------
 (defun ktmat:bname (en ed / nm)
+  ;; khoa ten block (kt:ukey: HOA ca chu co dau, vd "TR\\U+1EE4C")
   (setq nm (cond ((kt:dxf 2 ed)) ("")))
   (if (wcmatch nm "`**") (setq nm (cond ((kt:effname en)) (nm))))
-  (strcase nm)
+  (kt:ukey nm)
+)
+
+(defun ktmat:refxy (s / l)
+  ;; "x,y" (diem goc trong block, cot 5 dong BLOCK) -> (x y) ; nil neu khong doc duoc
+  (if (and (= (type s) 'STR) (setq l (kt:split s ",")) (cadr l)
+           (kt:num (car l)) (kt:num (cadr l)))
+    (list (kt:num (car l)) (kt:num (cadr l))))
+)
+
+(defun ktmat:refpt (ed off)
+  ;; diem goc cua ky hieu (vd dinh tam giac cao do) = off trong block, doi qua scale/xoay/mirror INSERT
+  (if off
+    (kt:xform off (kt:dxf 10 ed) (cond ((kt:dxf 41 ed)) (1.0)) (cond ((kt:dxf 42 ed)) (1.0))
+              (cond ((kt:dxf 50 ed)) (0.0)))
+    (kt:2d (kt:dxf 10 ed)))
 )
 
 (defun ktmat:has-circle (bn / r e ed i res)
@@ -357,27 +374,29 @@
   (if (and (numberp r) (> r 0)) (float r) 1.0)
 )
 
-(defun ktmat:dimval (ed lf / ov n)
-  ;; gia tri hien thi: so ghi de (neu la so) hoac do x DIMLFAC
+(defun ktmat:dimval (ed lf geo / ov n)
+  ;; gia tri hien thi: so ghi de (neu la so) hoac chieu dai HINH HOC x DIMLFAC
+  ;; (khong dung ma 42: AutoCAD luu Measurement DA nhan DIMLFAC -> dim chi tiet x4 bi nhan 2 lan)
   (setq ov (kt:trim (ktmat:plain (cond ((kt:dxf 1 ed)) ("")))))
   (if (and (/= ov "") (not (vl-string-search "<>" ov)) (setq n (kt:num ov)))
     n
-    (* (cond ((kt:dxf 42 ed)) (0.0)) lf))
+    (* geo lf))
 )
 
-(defun ktmat:collect (/ trc cdo oth fnames r ed p u nm atts v bubs levs dims typ p1 p2 dr lf)
+(defun ktmat:collect (/ trc cdo oth fnames r ed p u nm atts v bubs levs dims typ p1 p2 dr lf pr)
   ;; tra ve (bubbles levels dims)
   ;;  bubble: (uidx ten x y kichthuoc ename)
   ;;  level : (uidx giatri_m x y loai("B"/"T") ename)
   ;;  dim   : (uidx x13 y13 x14 y14 "H"/"V" giatri ename dimlfac)
   (foreach row (kt:cfg "BLOCK")
+    ;; BLOCK|ten|vai tro|tag chinh|tag phu|diem goc x,y (cot 5: CAODO - dinh tam giac trong block)
     (cond ((= (strcase (kt:str (cadr row))) "TRUC")
-           (setq trc (cons (cons (strcase (kt:str (car row))) (kt:str (caddr row))) trc)))
+           (setq trc (cons (cons (kt:ukey (car row)) (kt:str (caddr row))) trc)))
           ((= (strcase (kt:str (cadr row))) "CAODO")
-           (setq cdo (cons (cons (strcase (kt:str (car row))) (kt:str (caddr row))) cdo)))
+           (setq cdo (cons (list (kt:ukey (car row)) (kt:str (caddr row)) (ktmat:refxy (nth 4 row))) cdo)))
           ;; block vai tro khac (MATCAT, CHITIET, CUA...) khong bao gio la ky hieu truc
-          (T (setq oth (cons (strcase (kt:str (car row))) oth)))))
-  (setq fnames (kt:cfg-names "KHUNG"))
+          (T (setq oth (cons (kt:ukey (car row)) oth)))))
+  (setq fnames (kt:cfg-keys "KHUNG"))
   ;; block: truc / cao do (bo qua chinh khung ten)
   (foreach en (kt:ss-all '((0 . "INSERT")))
     (setq ed (entget en) p (kt:dxf 10 ed))
@@ -392,9 +411,11 @@
            (if (setq v (ktmat:axname (ktmat:pickatt atts (cdr r)) nil))
              (setq bubs (cons (list (car u) v (car p) (cadr p) (kt:boxsize en) en) bubs))))
           ((setq r (assoc nm cdo))
-           (setq v (ktmat:lv-parse (ktmat:pickatt atts (cdr r)) T))
+           (setq v (ktmat:lv-parse (ktmat:pickatt atts (cadr r)) T))
            (foreach a atts (if (null v) (setq v (ktmat:lv-parse (cdr a) T))))
-           (if v (setq levs (cons (list (car u) v (car p) (cadr p) "B" en) levs))))
+           ;; vi tri = diem goc (dinh tam giac) neu file chuan khai bao, khong thi diem chen
+           (setq pr (ktmat:refpt ed (caddr r)))
+           (if v (setq levs (cons (list (car u) v (car pr) (cadr pr) "B" en) levs))))
           ((and (null trc) atts (null (cdr atts))
                 (setq v (ktmat:axname (cdar atts) T))
                 (ktmat:has-circle (cond ((kt:dxf 2 ed)) (""))))
@@ -422,7 +443,9 @@
               dr (ktmat:hv (if (= typ 0) (cond ((kt:dxf 50 ed)) (0.0)) (angle p1 p2))))
         (if dr
           (setq dims (cons (list (car u) (car p1) (cadr p1) (car p2) (cadr p2) dr
-                                 (ktmat:dimval ed lf) en lf)
+                                 (ktmat:dimval ed lf (if (= dr "H") (abs (- (car p2) (car p1)))
+                                                                    (abs (- (cadr p2) (cadr p1)))))
+                                 en lf)
                            dims))))))
   (list (reverse bubs) (reverse levs) (reverse dims))
 )
@@ -471,8 +494,10 @@
                                 med (if sp (ktmat:median sp) 0.0)
                                 gap (- c (cadr (last seg))))
                           ;; ten lap nam sau doan hien tai mot khoang ho > 1.5 nhip trung vi
-                          ;; -> ban ve thu 2 (vd mai chi co truc 2..4) dat canh trong cung khung
-                          (if (and (> med 0) (> gap (* 1.5 med)))
+                          ;; -> ban ve thu 2 (vd mai chi co truc 2..4) dat canh trong cung khung;
+                          ;; hoac ten lap = ten DAU doan (6,7 | 6,7: 2 chi tiet WC cung truc dat canh)
+                          (if (or (and (> med 0) (> gap (* 1.5 med)))
+                                  (and (cdr seg) (= nm (car (car seg)))))
                             ;; ban ve thu 2 dat canh trong cung khung: tach doan
                             (setq segs (cons seg segs) seg (list (list nm c (nth 4 b))))
                             (if (not (member nm dups))

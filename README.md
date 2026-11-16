@@ -18,6 +18,10 @@ mọi đánh dấu nằm trên layer riêng `KT_CHECK` (xóa bằng `KTX`).
 3. Tool sinh `KT_ChuanCongTy.txt` cạnh `KT_Load.lsp`. **Mở file này rà lại** (layer, dimstyle,
    textstyle, khung tên, ký hiệu trục/cao độ/mặt cắt, các SETTING). Sửa tay được, rồi gõ `KTCFG` để nạp lại.
    Tham khảo `KT_ChuanCongTy.mau.txt` để biết ý nghĩa từng dòng.
+4. Repo đã có sẵn `lisp/KT_ChuanCongTy.txt` **đã chọn lọc** từ bản vẽ mẫu công ty (Template.dxf: khung
+   KHUNGTEENA + tờ bìa KHUNGT43, dimstyle `DG 1-xx`, layer `1 xxx`…; phân tích & danh sách rác:
+   `docs/TEMPLATE_ANALYSIS.md`). File ghi codepage ANSI 1252, tên có dấu dạng `\U+XXXX` (vd `TR\U+1EE4C`)
+   đúng như AutoLISP thấy – **đừng lưu lại bằng UTF-8**. KTMAU trên bản vẽ chưa dọn rác sẽ lấy cả rác.
 
 ## 3. Kiểm tra bản vẽ nhân viên
 ### 3.1 Hộp thoại tổng hợp – lệnh `KT` (hoặc `KTDLG`)
@@ -89,11 +93,22 @@ Mức độ: **LOI** (đỏ) – phải sửa · **CANHBAO** (vàng) – nên xe
 - Model vẽ 1:1 theo mm; khung tên chèn ở Model được scale theo tỷ lệ (hoặc dùng Layout + viewport).
 - Tên bản vẽ trong khung tên chứa `MAT BANG` / `MAT DUNG` / `MAT CAT` để `KTKHOP` phân loại.
 - Ký hiệu trục, cao độ, mặt cắt nên là block khai báo trong mục `BLOCK` của file chuẩn;
-  điểm chèn trục = tâm vòng tròn, điểm chèn cao độ = mũi tam giác. Chi tiết: `docs/MATCH_NOTES.md`.
+  điểm chèn trục nằm trên đường trục (tâm vòng tròn hoặc đuôi ký hiệu như block `TRỤC` công ty);
+  cao độ: mũi tam giác = điểm chèn, hoặc khai báo "điểm gốc" (vd `BLOCK|COTCAODO|CAODO|COTE||-88.25,-49.03`).
+  Chi tiết: `docs/MATCH_NOTES.md`.
 
 ## 5. Điều chỉnh độ nhạy (trong `KT_ChuanCongTy.txt`)
 `CAO_CHU_GIAY`, `TY_LE_CHO_PHEP`, `DUNG_SAI_KICH_THUOC`, `DIM_BUOC_CHAN` (đặt 0.5 nếu dùng tường 105),
 `LAYER_BO_QUA`, `MAX_LOI_MOI_MA`, `KIEM_DIM_ASSOC`… Thay đổi tạm cho dim: `KTDIMSET`.
+
+| SETTING mới | Ý nghĩa |
+|---|---|
+| `CAO_CHU_DIM` | chiều cao chữ DIM trên giấy (mm) = DIMTXT hiệu dụng × (DIMSCALE nếu > 0, không thì 1) / TL khung; công ty: `1.5,2` (DG 1-100 = 150 → 1.5 mm; DG 1-30 = 60 → 2 mm ở 1/30). Lệch ≤ 25% → CANHBAO, hơn → LOI. Không khai báo → suy từ mục DIMSTYLE |
+| `KHUNG_TRUNGTEN_LIENTIEP` | 0 (mặc định): không báo trùng tên khi các tờ cùng tên có số hiệu liên tiếp (C/01…C/07 "CHI TIẾT CỬA"); 1: báo GOIY |
+
+Định dạng mở rộng: `KHUNG|blk|tag số|TEN_BAN_VE+TEN_CONG_TRINH|tag TL|tỷ lệ gốc` (tên 2 dòng, dòng 2 được trống);
+nhiều dòng KHUNG (khung chính + tờ bìa không attribute `KHUNG|KHUNGT43||||54`);
+`BLOCK|tên|vai trò|tag chính|tag số bản vẽ tham chiếu|điểm gốc x,y` (2 cột cuối tùy chọn).
 
 ## 6. Cấu trúc & phát triển
 `docs/ARCHITECTURE.md` (kiến trúc, API), `docs/RESEARCH.md` (phương án, tương thích VinaCAD),

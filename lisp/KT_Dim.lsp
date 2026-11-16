@@ -388,10 +388,12 @@
   (setq typ (cdr (assoc 0 ed)))
   (cond
     ((= typ "MTEXT")
+     ;; 42/43 (khung chu thuc) AutoCAD luon ghi; DXF tu phan mem khac co the thieu -> uoc luong
      (setq ins (ktdim:2d (cdr (assoc 10 ed)))
-           w   (cdr (assoc 42 ed))
-           h   (cdr (assoc 43 ed))
-           a   (cdr (assoc 71 ed)))
+           h   (cond ((cdr (assoc 43 ed))) ((cdr (assoc 40 ed))))
+           w   (cond ((cdr (assoc 42 ed)))
+                     ((numberp h) (* 0.75 h (max 1 (strlen (ktdim:plain (cond ((cdr (assoc 1 ed))) (""))))))))
+           a   (cond ((cdr (assoc 71 ed))) (5)))
      (setq u (cond ((assoc 11 ed) (ktdim:unit (ktdim:2d (cdr (assoc 11 ed)))))
                    ((assoc 50 ed) (list (cos (cdr (assoc 50 ed))) (sin (cdr (assoc 50 ed)))))
                    (T '(1.0 0.0))))

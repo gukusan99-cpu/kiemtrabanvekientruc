@@ -331,10 +331,20 @@ def install(I, dwg, vfs, mode="acad"):
             raise LispError("bad argument value: table name " + to_str(x, True))
         return t
 
+    _tcache = {}
+
     def tbl_items(t):
+        # cache theo so ban ghi (entmake them ban ghi -> doi kich thuoc -> lam moi)
+        src = dwg.blocks if t == "BLOCK" else dwg.tables[t]
+        c = _tcache.get(t)
+        if c is not None and c[0] == len(src) and c[1] is src:
+            return c[2]
         if t == "BLOCK":
-            return [b for b in dwg.blocks.values() if not getattr(b, "system", False)]
-        return list(dwg.tables[t].values())
+            items = [b for b in src.values() if not getattr(b, "system", False)]
+        else:
+            items = list(src.values())
+        _tcache[t] = (len(src), src, items)
+        return items
 
     def tbl_short(t, it):
         if t == "BLOCK":

@@ -8,16 +8,27 @@
 ;;;   DIMSTYLE|ten|dimscale|dimlfac|dimtxt|dimasz|textstyle|dimdec|annotative(1/0)
 ;;;   TEXTSTYLE|ten|font|bigfont|chieu cao co dinh(0=khong co dinh)|width factor
 ;;;   KHUNG|ten block|tag so hieu|tag ten ban ve|tag ty le|ty le goc (nhan voi scale X)|tag khac...
-;;;   BLOCK|ten block|vai tro (TRUC/CAODO/MATCAT/CHITIET/CUA/KHAC)|tag chinh
+;;;        tag ten "A+B": ten ban ve 2 dong (vd TEN_BAN_VE+TEN_CONG_TRINH), dong 2 duoc de trong.
+;;;        Nhieu dong KHUNG duoc (khung chinh + to bia khong attribute: KHUNG|BIA||||54).
+;;;   BLOCK|ten block|vai tro (TRUC/CAODO/MATCAT/CHITIET/CUA/KHAC)|tag chinh|tag so ban ve tham chieu|diem goc x,y
+;;;        diem goc (CAODO): dinh tam giac trong block neu KHONG trung diem chen (vd -88.25,-49.03)
 ;;;   LAYOUT|ten layout
 ;;;   DANHMUC|so hieu|ten ban ve
 ;;;   SETTING|KHOA|gia tri
-;;; Luu file dang ANSI hoac UTF-8 KHONG dau (ten layer co dau tieng Viet co the khong khop tren CAD ANSI).
+;;; Luu file dang ANSI (cp1252). Ten co dau ghi nhu AutoLISP ANSI thay: ky tu thuoc cp1252 = 1 byte,
+;;; ky tu khac = \U+XXXX (vd "TRUC" co dau = TR\U+1EE4C). Khong luu UTF-8. Chuan that cua cong ty:
+;;; lisp/KT_ChuanCongTy.txt (docs/TEMPLATE_ANALYSIS.md).
 ;;; ============================================================
 
 ; ---------- SETTING ----------
 ; CAO_CHU_GIAY: chieu cao chu IN TREN GIAY cho phep (mm) = chieu cao that / ty le (dung sai 3%).
 SETTING|CAO_CHU_GIAY|1.8,2.0,2.5,3.0,3.5,5.0
+; CAO_CHU_DIM: chieu cao chu DIM tren giay (mm) = DIMTXT x (DIMSCALE neu > 0, khong thi 1) / ty le khung.
+;   Khong khai bao -> suy tu muc DIMSTYLE (dimscale > 0: dimtxt; dimscale 0: dimtxt / TL trong ten "1-100").
+;   Lech <= 25% -> CANHBAO, hon -> LOI (DIM-TYLE).
+SETTING|CAO_CHU_DIM|2
+; KHUNG_TRUNGTEN_LIENTIEP: 0 = khong bao trung ten ban ve khi so hieu lien tiep (bo nhieu to), 1 = GOIY.
+SETTING|KHUNG_TRUNGTEN_LIENTIEP|0
 ; TY_LE_CHO_PHEP: mau so ty le duoc phep (100 = 1/100).
 SETTING|TY_LE_CHO_PHEP|1,2,5,10,20,25,50,75,100,150,200,250,500
 ; LAYER_MAU_BYLAYER: 1 = doi tuong bat buoc mau/linetype ByLayer, 0 = khong kiem.
