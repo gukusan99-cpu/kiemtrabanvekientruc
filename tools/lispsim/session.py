@@ -59,14 +59,16 @@ def _where(e):
 
 
 class Session:
-    def __init__(self, dwg, mode="acad", lispdir=None, root=None, cfg_text=None):
+    def __init__(self, dwg, mode="acad", lispdir=None, root=None, cfg_text=None,
+                 env=None, kt_home=None, support=True):
         here = os.path.dirname(os.path.abspath(__file__))
         self.lispdir = lispdir or os.environ.get("LISPSIM_LISPDIR") or os.path.normpath(os.path.join(here, "..", "..", "lisp"))
         self.root = root or tempfile.mkdtemp(prefix="lispsim_")
         self.dwg = dwg
         self.mode = mode
-        self.vfs = VFS(self.root, cwd=DWG_DIR, support=[KT_HOME, "C:\\KT\\Fonts"])
-        for wp in (KT_HOME, DWG_DIR, "C:\\KT\\Fonts"):
+        self.home = kt_home or KT_HOME
+        self.vfs = VFS(self.root, cwd=DWG_DIR, support=([self.home] if support else []) + ["C:\\KT\\Fonts"])
+        for wp in (self.home, DWG_DIR, "C:\\KT\\Fonts"):
             self.vfs.mkdirs(wp)
         for f in os.listdir(self.lispdir):
             src = os.path.join(self.lispdir, f)
@@ -75,11 +77,11 @@ class Session:
             if f.lower() == "kt_chuancongty.txt":
                 continue
             if os.path.isfile(src) and f.lower().endswith((".lsp", ".txt")):
-                shutil.copy(src, self.vfs.host(KT_HOME + "\\" + f))
+                shutil.copy(src, self.vfs.host(self.home + "\\" + f))
         leg = os.path.join(self.lispdir, "legacy", "CheckDimOverlap.lsp")
         if os.path.isfile(leg):
-            os.makedirs(self.vfs.host(KT_HOME + "\\legacy"), exist_ok=True)
-            shutil.copy(leg, self.vfs.host(KT_HOME + "\\legacy\\CheckDimOverlap.lsp"))
+            os.makedirs(self.vfs.host(self.home + "\\legacy"), exist_ok=True)
+            shutil.copy(leg, self.vfs.host(self.home + "\\legacy\\CheckDimOverlap.lsp"))
         for font in ("romans.shx", "vntime.shx", "hztxt.shx", "txt.shx", "simplex.shx"):
             open(self.vfs.host("C:\\KT\\Fonts\\" + font), "w").close()
         if cfg_text is not None:
@@ -90,6 +92,8 @@ class Session:
         if mode == "lms":
             _lt.TYPE_NAMES.update({"SUBR": "LMS-SUBR", "USUBR": "LMS-USUBR"})
         self.I = Interp()
+        # env: dict registry getenv/setenv (dung chung giua 2 Session = khoi dong lai CAD)
+        self.I.env = env if env is not None else {}
         install(self.I, dwg, self.vfs, "acad" if mode == "lms" else mode)
         self.loaded = []
 
@@ -98,7 +102,7 @@ class Session:
         return self.vfs.host(winpath)
 
     def cfg_path(self):
-        return self.vfs.host(KT_HOME + "\\KT_ChuanCongTy.txt")
+        return self.vfs.host(self.home + "\\KT_ChuanCongTy.txt")
 
     def write_cfg(self, text):
         with open(self.cfg_path(), "w", encoding="latin-1") as f:
@@ -125,7 +129,7 @@ class Session:
                          list(self.I.sim_bugs), list(self.I.prompts), list(self.I.commands))
 
     def load(self, fname):
-        return self.eval('(load "%s\\\\%s")' % (KT_HOME.replace("\\", "\\\\"), fname))
+        return self.eval('(load "%s\\\\%s")' % (self.home.replace("\\", "\\\\"), fname))
 
     def load_all(self):
         r = self.load("KT_Load.lsp")

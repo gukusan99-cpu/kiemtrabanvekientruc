@@ -16,7 +16,7 @@
 
 (vl-load-com)
 
-(setq *KT:VER*   "1.1.1"
+(setq *KT:VER*   "1.1.2"
       *KT:LAYER* "KT_CHECK"
       *KT:CFGNAME* "KT_ChuanCongTy.txt")
 (if (not *KT:ISSUES*) (setq *KT:ISSUES* nil))

@@ -672,8 +672,20 @@ def install(I, dwg, vfs, mode="acad"):
     d("GRDRAW", lambda a: None, 3, 5)
     d("GRTEXT", lambda a: None, 0, 3)
     d("TRANS", lambda a: a[0], 3, 4)
-    d("GETENV", lambda a: None, 1, 1)
-    d("SETENV", lambda a: a[1], 2, 2)
+    # bien moi truong luu registry (getenv/setenv) - dict I.env, Session co the gieo san
+    if not hasattr(I, "env"):
+        I.env = {}
+    d("GETENV", lambda a: I.env.get(I.str_(a[0]).upper()), 1, 1)
+
+    def setenv_(a):
+        I.env[I.str_(a[0]).upper()] = I.str_(a[1])
+        return a[1]
+    d("SETENV", setenv_, 2, 2)
+
+    def getfiled_(a):
+        v = next_input(I.str_(a[0]), "str")
+        return str(v) if v else None
+    d("GETFILED", getfiled_, 4, 4)
 
     def textbox_(a):
         lst = I.plst(a[0])
@@ -1001,6 +1013,31 @@ def install(I, dwg, vfs, mode="acad"):
                 raise LispError("bad argument type: VLA-OBJECT " + to_str(x, True))
             return x
         d("VLAX-GET-ACAD-OBJECT", lambda a: APP, 0, 0)
+        PREFS = VlaObj("Preferences")
+        FILES = VlaObj("PreferencesFiles")
+        if not hasattr(I, "support_path"):
+            I.support_path = ""
+
+        def getprop(a):
+            o, nm = vobj(a[0]), I.symb(a[1]).name.upper() if not isinstance(a[1], str) else a[1].upper()
+            if o is APP and nm == "PREFERENCES":
+                return PREFS
+            if o is PREFS and nm == "FILES":
+                return FILES
+            if o is FILES and nm == "SUPPORTPATH":
+                return I.support_path
+            if o is APP and nm == "ACTIVEDOCUMENT":
+                return DOC
+            raise LispError("ActiveX Server returned the error: unknown name: " + nm)
+        d("VLAX-GET-PROPERTY", getprop, 2, 2)
+
+        def putprop(a):
+            o, nm = vobj(a[0]), I.symb(a[1]).name.upper() if not isinstance(a[1], str) else a[1].upper()
+            if o is FILES and nm == "SUPPORTPATH":
+                I.support_path = I.str_(a[2])
+                return None
+            raise LispError("ActiveX Server returned the error: unknown name: " + nm)
+        d("VLAX-PUT-PROPERTY", putprop, 3, 3)
         d("VLA-GET-ACTIVEDOCUMENT", lambda a: (vobj(a[0]), DOC)[1], 1, 1)
         d("VLA-STARTUNDOMARK", lambda a: (vobj(a[0]), None)[1], 1, 1)
         d("VLA-ENDUNDOMARK", lambda a: (vobj(a[0]), None)[1], 1, 1)

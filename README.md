@@ -4,13 +4,16 @@ Bộ AutoLISP giúp leader soát nhanh bản vẽ của nhân viên theo **quy c
 Chạy trên **AutoCAD** (khuyến nghị 2018 trở lên) và **VinaCAD**. Tool **chỉ đọc**: không sửa bản vẽ,
 mọi đánh dấu nằm trên layer riêng `KT_CHECK` (xóa bằng `KTX`).
 
-## 1. Cài đặt (1 lần)
-1. Chép cả thư mục `lisp/` vào máy, ví dụ `D:\KT_Tool\` (đường dẫn **không dấu**).
-2. AutoCAD: `OPTIONS` → *Files* → *Support File Search Path* → thêm `D:\KT_Tool`;
-   AutoCAD 2014+: thêm cả vào *Trusted Locations*.
-   VinaCAD: mục tương đương trong Tùy chọn (Options) → đường dẫn hỗ trợ.
-3. `APPLOAD` → chọn `KT_Load.lsp` → thêm vào **Startup Suite** để tự nạp mỗi lần mở CAD.
-4. Lần đầu trên VinaCAD: gõ `KTPROBE` – nếu có dòng `THIEU:` hãy gửi kết quả cho người phát triển.
+## 1. Cài đặt (1 lần) – AutoCAD và VinaCAD
+1. Giải nén vào thư mục **không dấu, không khoảng trắng**, ví dụ `C:\KT\lisp` hoặc `C:\KT_Tool_v1.1.2`.
+2. `APPLOAD` (VinaCAD: `APLOAD`) → **Startup Suite** → chỉ thêm **một file `KT_Load.lsp`**.
+   Nếu trước đây đã thêm tất cả các file `.lsp` thì xóa hết, chỉ giữ `KT_Load.lsp`.
+3. Mở lại CAD. Bộ nạp **không hỏi gì lúc khởi động**: tự tìm thư mục (Support path, `C:\KT\lisp`,
+   `C:\KT`, `D:\KT…`, `C:\KT_Tool*`, `D:\KT_Tool*`), tìm thấy thì **ghi nhớ** (biến KT_HOME) và
+   **tự thêm vào Support path** (và Trusted Locations trên AutoCAD) để các lần sau nạp ngay.
+4. Nếu dòng lệnh báo `go lenh KTSETUP`: gõ `KTSETUP` → chọn file `KT_Load.lsp` trong thư mục bộ KT
+   (chỉ cần 1 lần).
+5. Kiểm tra: `KTPROBE` (phải ra gần đủ 28/28 hàm) rồi `KT` để mở hộp thoại.
 
 ## 2. Tạo chuẩn công ty từ bản vẽ mẫu (1 lần, làm lại khi đổi mẫu)
 1. Mở bản vẽ mẫu (Nhà Chị Hạnh – Gia Lộc).
