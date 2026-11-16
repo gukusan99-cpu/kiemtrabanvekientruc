@@ -25,8 +25,16 @@
 ;;;      VinaCAD (tuong duong acaddoc.lsp):  (load "C:/KT/lisp/KT_Load.lsp")
 ;;;   3. Chay lenh KTPROBE (neu co) / KTHELP de kiem tra.
 ;;;
-;;; Neu KT_Load.lsp khong nam trong Support path, lenh se hoi duong dan thu muc.
-;;; Co the dat truoc: (setq *KT:HOME* "C:/KT/lisp") roi (load "C:/KT/lisp/KT_Load.lsp").
+;;; QUAN TRONG: Startup Suite CHI chua KT_Load.lsp (no tu nap cac file con lai).
+;;;  Neu da lo them TAT CA file .lsp vao Startup Suite: APPLOAD > Contents... > Remove
+;;;  cac file khac, chi giu KT_Load.lsp.
+;;;
+;;; Tim thu muc bo KT (KHONG BAO GIO hoi khi nap - Startup Suite se nuot cau hoi):
+;;;  *KT:HOME* -> (getenv "KT_HOME") (luu tu lan truoc) -> Support path (findfile)
+;;;  -> doan: C:\KT\lisp C:\KT D:\KT\lisp D:\KT, C:\KT_Tool* / D:\KT_Tool* (thu muc moi nhat).
+;;;  Tim thay -> setenv KT_HOME + them vao Support path / TRUSTEDPATHS (neu duoc) -> lan sau nap ngay.
+;;;  Khong tim thay -> in huong dan: go lenh KTSETUP (chon file KT_Load.lsp 1 lan).
+;;; Nap lai nhieu lan an toan (chi in 1 dong tong ket tu lan thu 2).
 ;;; ============================================================
 
 (defun ktload:dirof (path / i c res)
@@ -51,22 +59,83 @@
       (if (/= d "") d)))
 )
 
+(defun ktload:fnp (sym / v)
+  ;; ham co ton tai? (khong so ten kieu: VinaCAD/LMS tra ve ten khac SUBR)
+  (setq v (if (= (type sym) 'SYM) (eval sym) sym))
+  (if (and v (not (member (type v) '(STR INT REAL ENAME PICKSET FILE)))) T nil)
+)
+
+(defun ktload:try (f args / r)
+  ;; goi f; nil neu loi / ham khong co
+  (if (ktload:fnp f)
+    (if (ktload:fnp 'vl-catch-all-apply)
+      (progn (setq r (vl-catch-all-apply f args)) (if (not (vl-catch-all-error-p r)) r))
+      (apply f args)))
+)
+
 (defun ktload:okdir (d)
-  (and d (findfile (strcat d "\\KT_Core.lsp")))
+  (and (= (type d) 'STR) (/= d "") (findfile (strcat d "\\KT_Core.lsp")))
+)
+
+(defun ktload:sub (d)
+  ;; d hoac d\lisp neu chua bo KT
+  (cond ((ktload:okdir d) d)
+        ((and d (ktload:okdir (strcat d "\\lisp"))) (strcat d "\\lisp")))
+)
+
+(defun ktload:guess (/ d res lst)
+  ;; thu muc hay dung + C:\KT_Tool* / D:\KT_Tool* (lay ten sap xep cuoi = phien ban moi nhat)
+  (foreach g '("C:\\KT\\lisp" "C:\\KT" "D:\\KT\\lisp" "D:\\KT")
+    (if (and (not res) (ktload:okdir g)) (setq res g)))
+  (foreach drv '("C:\\" "D:\\")
+    (if (not res)
+      (progn
+        (setq lst (ktload:try 'vl-directory-files (list drv "KT_Tool*" -1)))
+        (if (listp lst)
+          (foreach f (if (ktload:fnp 'acad_strlsort) (ktload:try 'acad_strlsort (list lst)) lst)
+            (if (setq d (ktload:sub (strcat drv f))) (setq res d)))))))
+  res
 )
 
 (defun ktload:home (/ f d)
-  ;; thu muc chua bo KT
+  ;; thu muc chua bo KT; KHONG hoi nguoi dung. *KT:HOME-SRC* = nguon tim thay
   (cond
-    ((and (setq f (findfile "KT_Load.lsp")) (ktload:okdir (setq d (ktload:dirof f)))) d)
-    ((and (setq f (findfile "KT_Core.lsp")) (ktload:okdir (setq d (ktload:dirof f)))) d)
-    ((ktload:okdir (setq d (ktload:norm *KT:HOME*))) d)
-    (T
-     (princ "\n[KT] Khong tim thay thu muc bo KT trong Support path.")
-     (setq d (ktload:norm (getstring T "\nNhap duong dan thu muc chua KT_Core.lsp (vd C:\\KT\\lisp): ")))
-     (if (ktload:okdir d)
-       d
-       (progn (princ (strcat "\n[KT] Khong co KT_Core.lsp trong: " (if d d ""))) nil))))
+    ((setq d (ktload:sub (ktload:norm *KT:HOME*))) (setq *KT:HOME-SRC* "*KT:HOME*") d)
+    ((setq d (ktload:sub (ktload:norm (ktload:try 'getenv (list "KT_HOME")))))
+     (setq *KT:HOME-SRC* "KT_HOME") d)
+    ((and (setq f (findfile "KT_Load.lsp")) (setq d (ktload:sub (ktload:dirof f))))
+     (setq *KT:HOME-SRC* "Support") d)
+    ((and (setq f (findfile "KT_Core.lsp")) (setq d (ktload:sub (ktload:dirof f))))
+     (setq *KT:HOME-SRC* "Support") d)
+    ((setq d (ktload:guess)) (setq *KT:HOME-SRC* "doan") d))
+)
+
+(defun ktload:has (lst d / ok)
+  (foreach x lst (if (= (strcase (ktload:norm x)) (strcase d)) (setq ok T)))
+  ok
+)
+
+(defun ktload:remember (d / files sp tp)
+  ;; luu thu muc cho lan sau: KT_HOME (registry), Support path, TRUSTEDPATHS. Loi -> bo qua.
+  (ktload:try 'setenv (list "KT_HOME" d))
+  (setq files (ktload:try '(lambda () (vlax-get-property (vlax-get-property (vlax-get-acad-object) 'Preferences) 'Files)) nil))
+  (if files
+    (progn
+      (setq sp (ktload:try 'vlax-get-property (list files 'SupportPath)))
+      (if (and (= (type sp) 'STR) (not (ktload:has (ktload:split sp) d)))
+        (ktload:try 'vlax-put-property (list files 'SupportPath (strcat sp (if (= sp "") "" ";") d))))))
+  (setq tp (ktload:try 'getvar (list "TRUSTEDPATHS")))
+  (if (and (= (type tp) 'STR) (not (ktload:has (ktload:split tp) d)))
+    (ktload:try 'setvar (list "TRUSTEDPATHS" (strcat tp (if (= tp "") "" ";") d))))
+  d
+)
+
+(defun ktload:split (s / p res)
+  (while (setq p (vl-string-search ";" s))
+    (if (> p 0) (setq res (cons (substr s 1 p) res)))
+    (setq s (substr s (+ p 2))))
+  (if (/= s "") (setq res (cons s res)))
+  (reverse res)
 )
 
 (defun ktload:file (path / r)
@@ -80,11 +149,12 @@
     "khong tim thay file")
 )
 
-(defun ktload:run (/ d mods extra files err e nOK fn)
-  (setq d (ktload:home))
+(defun ktload:run (/ d mods extra files err e nOK fn again)
+  (setq d (ktload:home) again *KT:LOADED*)
   (if d
     (progn
       (setq *KT:HOME* d nOK 0)
+      (ktload:remember d)
       ;; 1. Loi bat buoc
       (if (setq e (ktload:file (strcat d "\\KT_Core.lsp")))
         (princ (strcat "\n[KT] LOI nap KT_Core.lsp: " e " -> dung nap."))
@@ -108,13 +178,36 @@
               (if (setq e (ktload:file (strcat d "\\" fn)))
                 (setq err (cons (strcat fn ": " e) err))
                 (setq nOK (1+ nOK)))))
-          (princ (strcat "\n[KT] Da nap " (itoa nOK) " file tu " d))
+          (setq *KT:LOADED* T)
+          (princ (strcat "\n[KT] Da nap " (if again "lai " "") (itoa nOK) " file tu " d
+                         (if again " (bo KT da nap truoc do - Startup Suite chi can KT_Load.lsp)" "")))
           (if err
             (progn
               (princ (strcat "\n[KT] " (itoa (length err)) " file LOI (bao lai cho nhom phat trien):"))
               (foreach x (reverse err) (princ (strcat "\n   - " x)))))
-          (princ "\n[KT] Go KT de mo hop thoai tong hop, KTHELP xem danh sach lenh, KTALL kiem tra tat ca."))))
-    (princ "\n[KT] Chua nap bo KT."))
+          (if (not again)
+            (princ "\n[KT] Go KT de mo hop thoai tong hop, KTHELP xem danh sach lenh, KTALL kiem tra tat ca.")))))
+    (princ "\n[KT] Chua nap bo KT: khong tim thay thu muc chua KT_Core.lsp -> go lenh KTSETUP de chon file KT_Load.lsp (1 lan)."))
+  (princ)
+)
+
+(if (ktload:fnp 'vl-load-com) (vl-load-com))
+
+(defun c:KTSETUP (/ f d)
+  ;; chon thu muc bo KT 1 lan (luu KT_HOME + Support path), roi nap
+  (if (ktload:fnp 'getfiled)
+    (setq f (ktload:try 'getfiled (list "Chon file KT_Load.lsp cua bo KT" "" "lsp" 0))))
+  (if (= (type f) 'STR)
+    (setq d (ktload:dirof f))
+    (setq d (ktload:norm (getstring T "\nDuong dan thu muc chua KT_Core.lsp (vd C:\\KT\\lisp) <huy>: "))))
+  (cond
+    ((null d) (princ "\n[KT] Huy KTSETUP."))
+    ((not (setq d (ktload:sub d))) (princ "\n[KT] Thu muc nay khong co KT_Core.lsp."))
+    (T
+     (setq *KT:HOME* d)
+     (ktload:remember d)
+     (princ (strcat "\n[KT] Da luu thu muc bo KT: " d " (lan sau tu nap)."))
+     (ktload:run)))
   (princ)
 )
 
