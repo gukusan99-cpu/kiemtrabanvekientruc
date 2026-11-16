@@ -595,16 +595,29 @@
   (mapcar '(lambda (r) (kt:ukey (car r))) (kt:cfg sec))
 )
 
-(defun kt:cfg-row (sec name / up uk)
+(defun kt:cfg-ukt (sec / c tb)
+  ;; bang (khoa-ukey . dong) cua muc sec, cache theo *KT:CFG* (tu lam moi khi cau hinh doi)
+  (if (not (eq (car *KT:UKC*) *KT:CFG*)) (setq *KT:UKC* (list *KT:CFG*)))
+  (setq sec (strcase sec))
+  (if (setq c (assoc sec (cdr *KT:UKC*)))
+    (cdr c)
+    (progn
+      (setq tb (mapcar '(lambda (r) (cons (kt:ukey (car r)) r))
+                       (vl-remove-if-not '(lambda (r) (= (type (car r)) 'STR)) (kt:cfg sec))))
+      (setq *KT:UKC* (cons (car *KT:UKC*) (cons (cons sec tb) (cdr *KT:UKC*))))
+      tb))
+)
+
+(defun kt:cfg-row (sec name / up)
   ;; dong dau tien cua muc sec co truong 1 = name (khong phan biet hoa thuong, ca chu co dau)
   (if (= (type name) 'STR)
     (progn
       (setq up (strcase name))
-      (car (vl-member-if
-             '(lambda (r) (and (= (type (car r)) 'STR)
-                               (or (= (strcase (car r)) up)
-                                   (= (kt:ukey (car r)) (cond (uk) ((setq uk (kt:ukey name))))))))
-             (kt:cfg sec)))))
+      (cond
+        ((car (vl-member-if
+                '(lambda (r) (and (= (type (car r)) 'STR) (= (strcase (car r)) up)))
+                (kt:cfg sec))))
+        ((cdr (assoc (kt:ukey name) (kt:cfg-ukt sec)))))))
 )
 
 (defun kt:cfg-val (key def / r)

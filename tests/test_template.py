@@ -200,9 +200,8 @@ class T2_KTALL(unittest.TestCase):
         iss = ktall("acad")[3]
         self.assertEqual([i for i in iss if i["code"] == "DIM-TYLE" and "Dim TL 1/1 " in i["msg"]], [])
 
-    # ---- bao nham con mo ----
     def test_z_noise(self):
-        """B-T4: Z-KHAC0 nguong 1e-6 -> bao 'Z = 0' / 'Z = -0' (|z| < 0.001)"""
+        """B-T4 (da sua): Z-KHAC0 nguong 1e-6 -> bao 'Z = 0' / 'Z = -0' (|z| < 0.001)"""
         iss = ktall("acad")[3]
         bad = [i["msg"] for i in iss if i["code"] == "Z-KHAC0" and re.search(r"Z = -?0 \(", i["msg"])]
         self.assertEqual(bad, [])

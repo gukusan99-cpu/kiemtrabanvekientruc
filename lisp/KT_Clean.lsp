@@ -177,7 +177,8 @@
      zs))
 )
 
-(defun ktcl:chk-z (/ ss i en ed typ zmax)
+(defun ktcl:chk-z (/ ss i en ed typ zmax ztol)
+  (setq ztol (kt:cfg-num "Z_DUNG_SAI" 0.001))
   (if (setq ss (ssget "_X" (append '((0 . "LINE,LWPOLYLINE,INSERT,TEXT,MTEXT,CIRCLE,ARC,DIMENSION")
                                      (410 . "Model"))
                                    (ktcl:notmark))))
@@ -187,7 +188,7 @@
         (setq en (ssname ss i) i (1+ i) ed (entget en) typ (kt:dxf 0 ed) zmax 0.0)
         (foreach z (ktcl:zof ed typ)
           (if (> (abs z) (abs zmax)) (setq zmax z)))
-        (if (> (abs zmax) (kt:cfg-num "Z_DUNG_SAI" 0.001))   ; bo sai so so hoc
+        (if (> (abs zmax) ztol)   ; bo sai so so hoc
           (kt:add "SACH" "Z-KHAC0" "CANHBAO"
                   (strcat typ " (layer " (kt:dxf 8 ed) ") co cao do Z = " (ktcl:fmt zmax)
                           " (ban ve 2D can Z = 0)")

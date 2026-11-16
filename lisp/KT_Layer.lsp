@@ -237,7 +237,7 @@
 )
 
 ;;; ---------- 7. Doi tuong trong dinh nghia block o layer khong chuan ----------
-(defun ktlay:blkbad (first / e ed up n bad)
+(defun ktlay:blkbad (first / e ed up n bad uc k)
   ;; tra ve (so doi tuong sai . danh sach layer sai) cua 1 dinh nghia block
   (setq e first n 0)
   (while e
@@ -247,7 +247,9 @@
       (progn
         (setq up (strcase (cond ((kt:dxf 8 ed)) ("0"))))
         (if (and (/= up "0")
-                 (not (member (kt:ukey (kt:dxf 8 ed)) *KT:LAYSTD*))
+                 (not (member (cond ((cdr (assoc (setq k (cond ((kt:dxf 8 ed)) ("0"))) uc)))
+                                   (T (setq uc (cons (cons k (kt:ukey k)) uc)) (cdar uc)))
+                             *KT:LAYSTD*))
                  (not (ktlay:ignored up)))
           (progn
             (setq n (1+ n))
