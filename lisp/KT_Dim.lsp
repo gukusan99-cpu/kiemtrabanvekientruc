@@ -3,7 +3,7 @@
 ;;; ------------------------------------------------------------
 ;;; Can KT_Core.lsp nap truoc.
 ;;; Lenh:
-;;;   KTDIM    : kiem tra dim (chon dim, Enter = tat ca dim moi khong gian)
+;;;   KTDIM    : kiem tra dim (pham vi: toan ban ve / vung cua so)
 ;;;   KTDIMSET : doi tam thoi cac SETTING cua module trong phien (khong ghi file)
 ;;; Ham cho KTALL: (ktdim:run)  - kiem tra tat ca dim, khong hoi
 ;;;
@@ -883,16 +883,9 @@
     (ktdim:check (kt:ss-all '((0 . "DIMENSION")))))
 )
 
-(defun c:KTDIM (/ ss lst)
-  (if (kt:cfg-ok)
-    (progn
-      (princ "\nChon DIM can kiem tra <Enter = tat ca DIM>: ")
-      (setq lst (if (setq ss (ssget '((0 . "DIMENSION"))))
-                  (kt:ss->list ss)
-                  (kt:ss-all '((0 . "DIMENSION")))))
-      (if lst
-        (ktdim:check lst)
-        (princ "\n[DIM] Khong tim thay DIM nao."))))
+(defun c:KTDIM ()
+  ;; pham vi: toan ban ve / vung cua so (thay cho chon tung dim)
+  (kt:cmd 'ktdim:run)
   (princ)
 )
 

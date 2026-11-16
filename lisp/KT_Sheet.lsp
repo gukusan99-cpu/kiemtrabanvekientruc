@@ -814,7 +814,7 @@
   (princ)
 )
 
-(defun c:KTKHUNG () (ktsh:run) (princ))
+(defun c:KTKHUNG () (kt:cmd 'ktsh:run) (princ))
 
 (princ "\nKT_Sheet: lenh KTKHUNG (khung ten / so hieu / danh muc / tham chieu).")
 (princ)

@@ -1109,7 +1109,7 @@
       (foreach e (nth 4 x) (if (and e (entget e) (= (kt:space (entget e)) (kt:cur-space))) (ssadd e s)))
       (if (> (sslength s) 0) (vl-catch-all-apply 'sssetfirst (list nil s)))
       (princ (strcat "\nLoi " (itoa (1+ *KT:IDX*)) "/" (itoa n) " [" (nth 2 x) "] "
-                     (nth 0 x) "-" (nth 1 x) ": " (nth 3 x)
+                     (nth 1 x) ": " (nth 3 x)
                      (if (nth 5 x) "" "  (loi chung cua ban ve)"))))
     (princ "\nChua co ket qua. Chay KTALL hoac 1 lenh kiem tra truoc."))
   (princ)

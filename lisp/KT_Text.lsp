@@ -329,7 +329,7 @@
     (progn (princ "\n[TEXT] Khong co file chuan - bo qua.") nil))
 )
 
-(defun c:KTTEXT () (kttxt:run) (princ))
+(defun c:KTTEXT () (kt:cmd 'kttxt:run) (princ))
 
 (princ "\nKT_Text da nap. Lenh: KTTEXT")
 (princ)

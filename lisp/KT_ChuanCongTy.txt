@@ -34,6 +34,8 @@ SETTING|LAYER_MAU_BYLAYER|1
 SETTING|MAU_BYOBJ_BO_QUA|HATCH
 SETTING|MAX_LOI_MOI_MA|300
 SETTING|DUNG_SAI_KICH_THUOC|1
+; Z_DUNG_SAI: |Z| nho hon gia tri nay (mm) coi nhu 0 (bo sai so so hoc)
+SETTING|Z_DUNG_SAI|0.001
 ; LAYER_BO_QUA: *|* = layer xref. KT_CHECK / CHECK_DIM_OVERLAP = layer danh dau.
 SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,CHECK_DIM_OVERLAP,*|*
 ; KHUNG_TRUNGTEN_LIENTIEP: 0 = khong bao trung ten khi cac to cung ten co so hieu LIEN TIEP cung

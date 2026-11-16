@@ -21,17 +21,19 @@ KT_TEMPLATE_DXF=/duong/dan/Template.dxf python3 -m unittest tests/test_template.
 
 ## 1. Kết quả lần chạy mới nhất
 
-**Lần chạy #4 – 2026-11-15 17:50** – lisp: `KT_Core 17:41 (679fcc)`, `KT_Dim 17:41 (9b8c6b)`,
-`KT_Template 17:41 (586347)`, `KT_Sheet 17:41 (069764)`, `KT_Match 17:24`, `KT_Text 17:25`, `KT_Layer 15:38`,
-`KT_Clean 10:40`; file chuẩn **chọn lọc** `lisp/KT_ChuanCongTy.txt 17:21 (159d5d)` của Dev E.
+**Lần chạy #5 (cuối) – 2026-11-16 00:35** – lisp (không đổi từ 2026-11-15 17:48, > 6 giờ – dừng vòng lặp):
+`KT_Core 17:47 (796675)`, `KT_Dim 17:41 (9b8c6b)`, `KT_Template 17:41 (586347)`, `KT_Sheet 17:48 (60060a)`,
+`KT_Match 17:48 (4e4676)`, `KT_Text 17:25`, `KT_Layer 15:38`, `KT_Clean 10:40`; file chuẩn **chọn lọc**
+`lisp/KT_ChuanCongTy.txt 17:45 (114dda)` của Dev E. Kết quả #5 trùng #4 (814 lỗi, cùng phân bố).
 
 | Lệnh | Thời gian | Số lần gọi hàm defun | Lỗi nội bộ (crash / lỗi bị nuốt) |
 |---|---:|---:|---|
-| KTMAU (AutoCAD, Enter = tự đoán) | 9.3 s | 487 414 | 0 – khung KHUNGTEENA (+KHUNGDIENNUOC, KHUNGT43), 61 DANHMUC, LAYOUT Layout1/Layout2 |
-| KTMAU (VinaCAD) | 10.4 s | 510 709 | 0 – **giống hệt AutoCAD** (B-T3 đã sửa) |
-| KTALL (AutoCAD) | 34.2 s | 1 739 724 | 0, không sửa/xóa đối tượng gốc |
-| KTALL (VinaCAD, không ActiveX) | 42.8 s | 2 030 043 | 0, kết quả **giống hệt** AutoCAD (814 lỗi) |
+| KTMAU (AutoCAD, Enter = tự đoán) | 9.2 s | 487 414 | 0 – khung KHUNGTEENA (+KHUNGDIENNUOC, KHUNGT43), 61 DANHMUC, LAYOUT Layout1/Layout2 |
+| KTMAU (VinaCAD) | 10.2 s | 510 709 | 0 – **giống hệt AutoCAD** (B-T3 đã sửa) |
+| KTALL (AutoCAD) | 36.2 s | 1 740 380 | 0, không sửa/xóa đối tượng gốc |
+| KTALL (VinaCAD, không ActiveX) | 42.3 s | 2 030 699 | 0, kết quả **giống hệt** AutoCAD (814 lỗi) |
 | KTN, KTN, KTP, KTBC, KTX | < 1.5 s | | 0 – KTN/KTP xoay vòng `Loi i/814`, CSV 814 dòng |
+| KTALL phạm vi **Vùng** (tính năng mới, cửa sổ = khung KT/01) | **75.5 s** | 3 763 840 | 0 – 50 lỗi, 0 lỗi ngoài vùng; chậm gấp 2 toàn bản vẽ (G5) |
 
 Nạp DXF: 4–5 s (91 841 đối tượng CSDL).
 
@@ -101,7 +103,9 @@ builder `Drawing.dim_linear` của lispsim cũng đã sửa theo (trước ghi s
 - Sửa: `(setq ed (member '(100 . "AcDbLayout") ed))` trước khi lấy 1 và 71 (hoặc dùng `layoutlist`
   + tab order); loại tên "" . Test: `T1_KTMAU.test_layout_names_not_empty` (đang expectedFailure).
 
-### B-T2 – KTMAU bỏ dimstyle của xref đã bind – THẤP
+### B-T2 – KTMAU bỏ dimstyle của xref đã bind – THẤP – **ĐÓNG (theo thiết kế)**
+- #4: Dev E đổi lọc thành `(wcmatch nm "*`$#")` và chủ ý bỏ mọi tên rác xref bind `Xr…$0$…` (layer/dimstyle,
+  `KT_Template.lsp` ~dòng 826/953) → DIM-STYLE cho 2 dim `Xr…Standard_m` là đúng ý đồ (style rác).
 - `lisp/KT_Template.lsp`, `ktmau:sec-dimstyle`: `(not (vl-string-search "$" nm))` nhằm bỏ style con
   `ISO-25$0` nhưng bỏ luôn `Xr QC chong tham$0$Standard_m` (đang dùng) trong khi layer/textstyle
   `Xr…$0$…` vẫn được lấy → chạy KTALL với file KTMAU sinh báo DIM-STYLE LOI cho chính template.
@@ -131,6 +135,12 @@ builder `Drawing.dim_linear` của lispsim cũng đã sửa theo (trước ghi s
   vì file chuẩn không lưu TrueColor → template tự báo lỗi chính nó. Nên: KTMAU ghi thêm cờ TC, hoặc KTLAYER chỉ báo TC khi chuẩn ghi rõ ACI.
 - G4 `ktdim:textquad` cần mã 42/43 của MTEXT; AutoCAD luôn có, nhưng DXF lưu từ phần mềm khác có thể thiếu → `h = 0`,
   dung sai 1e-6 → dim liên tục chung điểm (lệch 0.002) bị báo DIM-DUONG. Nên dự phòng `h = (cdr (assoc 40 ed))`.
+
+- G5 HIỆU NĂNG phạm vi Vùng: KTALL vùng 1 khung (50 lỗi) mất 75 s / 3.76 triệu lần gọi so với toàn bản vẽ 36 s /
+  1.74 triệu. Nóng nhất `kt:uup` 1.65 triệu, `kt:ukey` 126 k, `lambda@kt:cfg-row` 76 k: `KT_Core.lsp`
+  `kt:cfg-row` tính lại `(kt:ukey (car r))` cho MỌI dòng của mục mỗi lần tra (không cache), `kt:ukey` ghép
+  chuỗi từng ký tự. Đề xuất: cache khóa ukey của từng dòng khi nạp chuẩn (assoc khóa → dòng), hoặc so `strcase`
+  trước rồi mới tính ukey; tra `kt:cfg-row` trong vòng lặp đối tượng nên dùng bảng đã chuẩn hoá.
 
 ### Đã sửa (giữ test hồi quy trong `tests/test_template.py`)
 | # | Mô tả | Trạng thái |
@@ -186,4 +196,5 @@ file ảo (không có file thật → ANH-MAT/TEXT-FONTMAT phụ thuộc môi tr
 | 1 | 17:00 | lisp commit 1866f0b+, chuẩn = KTMAU sinh | 31 s, 1 154 lỗi (LOI 126) | DIM-TYLE 300 báo nhầm (F1), KHOP-CAODO-VITRI 10 (F2), DIM-DUONG 14 (do lispsim thiếu MTEXT 42/43 – đã sửa trong bộ nạp) |
 | 2 | 17:20 | KT_Dim mới, chuẩn = KTMAU sinh | 36 s, 934 lỗi | F1 còn 74 → Dev E đang sửa |
 | 3 | 17:40 | lisp 17:35, chuẩn chọn lọc 17:21 | 37.7 s, 814 lỗi (LOI 124) | F1, F2 đã hết; còn B-T1..B-T4 |
-| 4 | 17:50 | xem mục 1 | 34.2 s, 814 lỗi (LOI 124) | B-T1, B-T3, nhân DIMLFAC 2 lần đã sửa; còn B-T2, B-T4 |
+| 4 | 17:50 | lisp 17:41 | 34.2 s, 814 lỗi (LOI 124) | B-T1, B-T3, nhân DIMLFAC 2 lần đã sửa; B-T2 đóng theo thiết kế |
+| 5 | 11-16 00:35 | lisp 17:48 (ổn định > 6 h), chuẩn 17:45 | 36.2 s, 814 lỗi (LOI 124) | Còn **B-T4** (3 Z-KHAC0) + góp ý G1–G5; dừng vòng lặp |

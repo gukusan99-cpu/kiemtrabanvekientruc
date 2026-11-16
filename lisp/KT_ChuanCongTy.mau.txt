@@ -37,6 +37,8 @@ SETTING|LAYER_MAU_BYLAYER|1
 SETTING|MAX_LOI_MOI_MA|300
 ; DUNG_SAI_KICH_THUOC: dung sai (mm) khi so khop kich thuoc / truc / cao do.
 SETTING|DUNG_SAI_KICH_THUOC|1
+; Z_DUNG_SAI: |Z| nho hon gia tri nay (mm) coi nhu 0 (bo sai so so hoc)
+SETTING|Z_DUNG_SAI|0.001
 ; LAYER_BO_QUA: layer khong kiem tra (wildcard, cach nhau dau phay).
 ;   *|* = moi layer xref (KT_Core noi lai phan sau dau | cua gia tri SETTING).
 SETTING|LAYER_BO_QUA|DEFPOINTS,KT_CHECK,CHECK_DIM_OVERLAP,*|*

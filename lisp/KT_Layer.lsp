@@ -96,7 +96,7 @@
       (setq up (nth 1 L))
       (if (and (not (member up '("0" "DEFPOINTS")))
                (not (ktlay:ignored up))
-               (not (member up *KT:LAYSTD*)))
+               (not (member (kt:ukey (car L)) *KT:LAYSTD*)))
         (progn
           (setq cr (ktlay:laycount (car L)))
           (if (> (car cr) 0)
@@ -125,7 +125,7 @@
                 slw   (kt:num (nth 3 row))
                 spl   (kt:num (nth 4 row))
                 diffs nil)
-          (if (and sc (or (/= (fix sc) col) tc))
+          (if (and sc (/= (fix sc) col))   ; TrueColor: chi so mau ACI (file chuan khong luu TC)
             (setq diffs (cons (strcat "mau " (itoa col) (if tc " (TrueColor)" "")
                                       " (chuan " (itoa (fix sc)) ")")
                               diffs)))
@@ -247,7 +247,7 @@
       (progn
         (setq up (strcase (cond ((kt:dxf 8 ed)) ("0"))))
         (if (and (/= up "0")
-                 (not (member up *KT:LAYSTD*))
+                 (not (member (kt:ukey (kt:dxf 8 ed)) *KT:LAYSTD*))
                  (not (ktlay:ignored up)))
           (progn
             (setq n (1+ n))
@@ -299,7 +299,7 @@
 ;;; ---------- Chay ----------
 (defun ktlay:prep ()
   (setq *KT:LAYSKIP* (ktlay:skip-pats)
-        *KT:LAYSTD*  (kt:cfg-names "LAYER")
+        *KT:LAYSTD*  (kt:cfg-keys "LAYER")   ; so bang kt:ukey (ten co dau)
         *KT:LAYTBL*  (ktlay:tbl))
   T
 )
@@ -324,7 +324,7 @@
     (progn (princ "\n[LAYER] Khong co file chuan - bo qua.") nil))
 )
 
-(defun c:KTLAYER () (ktlay:run) (princ))
+(defun c:KTLAYER () (kt:cmd 'ktlay:run) (princ))
 
 (princ "\nKT_Layer da nap. Lenh: KTLAYER")
 (princ)

@@ -907,7 +907,7 @@
   (princ)
 )
 
-(defun c:KTKHOP () (ktmat:run) (princ))
+(defun c:KTKHOP () (kt:cmd 'ktmat:run) (princ))
 
 (princ "\nKT_Match: lenh KTKHOP (khop truc / cao do / dim giua cac ban ve).")
 (princ)
