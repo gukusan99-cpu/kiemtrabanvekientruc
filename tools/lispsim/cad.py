@@ -795,6 +795,9 @@ def install(I, dwg, vfs, mode="acad"):
         f = fh_of(a[0])
         f.fh.close()
         f.closed = True
+        if getattr(I, "lms_quirks", False):
+            # VinaCAD that (nen LMS): close bao loi du file da dong xong
+            raise LispError("C operation (write) signaled an error.\nC library explanation: Bad file descriptor.")
         return None
     d("CLOSE", close_, 1, 1)
 
@@ -981,7 +984,15 @@ def install(I, dwg, vfs, mode="acad"):
         bits, kws = I.ig
         r = get_generic(prm(a), lambda v: None if kws else (str(v) if isinstance(v, str) else None), "kw")
         return r
-    d("GETKWORD", getkword_, 0, 1)
+    def getkword_lms(a):
+        # VinaCAD that: tu khoa dung van bi "Invalid option keyword", Enter hoi lai
+        while True:
+            v = next_input(prm(a, 0), "str")
+            if v is None:
+                raise LispError("Function cancelled")
+            I.emit("Invalid option keyword.")
+
+    d("GETKWORD", lambda a: (getkword_lms(a) if getattr(I, "lms_quirks", False) else getkword_(a)), 0, 1)
 
     def to_pt(v):
         if isinstance(v, (tuple, list)):

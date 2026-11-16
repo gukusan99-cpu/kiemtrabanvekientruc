@@ -362,8 +362,56 @@ class T7_VinaCAD_LMS(unittest.TestCase):
         s.load_all()
         r = s.command("KTPROBE")
         self.assertIn("co 28/28 ham", r.out)
-        r = s.command("KTALL")
-        self.assertEqual(internal_errors(r), [], r.describe_errors())
+        r = s.command("KTALL", [""])
+        # loi close cua VinaCAD da duoc kt:close bat co chu y -> khong tinh
+        errs = [e for e in internal_errors(r) if not e.startswith("C operation")]
+        self.assertEqual(errs, [], r.describe_errors())
         out = r.out
         self.assertNotIn("Chua nap KT_Core", out)
         self.assertTrue(len(s.issues()) > 0)
+
+
+class T8_VinaCAD_LMS_Quirks(unittest.TestCase):
+    """Bao cao VinaCAD lan 3 cua leader: (1) getkword: go 'Toanbanve' van 'Invalid option keyword',
+    Enter hoi lai; (2) close bao 'C operation (write) signaled an error. Bad file descriptor'
+    -> KTALL / KT dung ngay. Che do lms cua lispsim tai hien ca 2 loi."""
+
+    def sess(self):
+        cfg = mau_cfg()[3]
+        d, seed = make_nhanvien()
+        s = Session(d, mode="lms", cfg_text=cfg)
+        s.load_all()
+        return s
+
+    def test_ktall_scope_answers(self):
+        for ans in ("Toanbanve", "", "t", "Toan ban ve"):
+            s = self.sess()
+            r = s.command("KTALL", [ans])
+            self.assertNotIn("Invalid option", r.out, ans)
+            self.assertNotIn("C operation", r.out, ans)
+            self.assertNotIn("Khong chay kiem tra", r.out, ans)
+            self.assertTrue(len(s.issues()) > 0, "%r: khong co ket qua\n%s" % (ans, r.out[-800:]))
+
+    def test_ktall_window_answer(self):
+        s = self.sess()
+        r = s.command("KTALL", ["v", (0, 0), (1e7, 1e7)])
+        self.assertNotIn("C operation", r.out)
+        self.assertIn("Pham vi", r.out)
+
+    def test_ktbc_and_probe(self):
+        s = self.sess()
+        s.command("KTALL", [""])
+        r = s.command("KTBC")
+        self.assertNotIn("C operation", r.out)
+        r = s.command("KTPROBE")
+        self.assertIn("File I/O:", r.out)
+
+    def test_kt_dialog_opens(self):
+        sys.path.insert(0, HERE)
+        from lispsim.dcl import attach_dcl
+        s = self.sess()
+        dlg = attach_dcl(s)
+        dlg.script = [[("cancel",)]]
+        r = s.command("KT")
+        self.assertNotIn("C operation", r.out)
+        self.assertNotIn("Khong tao/nap duoc file hop thoai", r.out)

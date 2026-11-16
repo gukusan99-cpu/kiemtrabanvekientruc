@@ -16,7 +16,7 @@
 
 (vl-load-com)
 
-(setq *KT:VER*   "1.1.2"
+(setq *KT:VER*   "1.1.3"
       *KT:LAYER* "KT_CHECK"
       *KT:CFGNAME* "KT_ChuanCongTy.txt")
 (if (not *KT:ISSUES*) (setq *KT:ISSUES* nil))
@@ -510,6 +510,13 @@
   f
 )
 
+;;; Dong file an toan: VinaCAD (LMS) co the bao "C operation (write) signaled an error.
+;;; Bad file descriptor" khi close (ca file chi doc) -> bo qua loi, du lieu da doc/ghi xong.
+(defun kt:close (fh)
+  (if fh (vl-catch-all-apply 'close (list fh)))
+  nil
+)
+
 (defun kt:cfg-file ()
   ;; file chuan: cung thu muc ban ve / Support path, roi thu muc bo tool
   (cond ((findfile *KT:CFGNAME*))
@@ -521,6 +528,7 @@
   (setq *KT:CFG* nil f (kt:cfg-file) first T)
   (if (and (findfile f) (setq fh (open f "r")))
     (progn
+      (setq *KT:IOERR* (vl-catch-all-apply '(lambda ()
       (while (setq ln (read-line fh))
         ;; bo BOM UTF-8 (Notepad luu UTF-8) o dong dau
         (if (and first (>= (strlen ln) 3) (= (substr ln 1 3) "\357\273\277"))
@@ -534,8 +542,10 @@
             (if (and (cdr row) (/= (kt:join (cdr row) "") ""))
               (if (setq it (assoc sec res))
                 (setq res (subst (cons sec (cons (cdr row) (cdr it))) it res))
-                (setq res (cons (list sec (cdr row)) res)))))))
-      (close fh)
+                (setq res (cons (list sec (cdr row)) res)))))))) nil))
+      (if (vl-catch-all-error-p *KT:IOERR*)
+        (princ (strcat "\n[KT] Canh bao khi doc file chuan: " (vl-catch-all-error-message *KT:IOERR*))))
+      (kt:close fh)
       ;; dao lai thu tu dong trong moi muc (da cons nguoc)
       (setq *KT:CFG* (mapcar '(lambda (s) (cons (car s) (reverse (cdr s)))) (reverse res)))
       T)
@@ -956,11 +966,43 @@
     (progn (princ "\n[KT] Huy chon vung.") nil))
 )
 
+;;; ---------- Hoi lua chon tu khoa (thay initget + getkword) ----------
+;;; VinaCAD (nen LMS) xu ly initget/getkword khac AutoCAD: go dung tu khoa van bao
+;;; "Invalid option keyword", Enter khong tra nil -> tu doc chuoi va tu so khop.
+;;; Tra ve tu khoa (dung chinh ta trong kws), nil neu Enter. ESC -> loi nhu getkword.
+(defun kt:kwnorm (s / i c res)
+  (setq s (strcase (kt:str s)) res "" i 1)
+  (while (<= i (strlen s))
+    (if (/= (setq c (substr s i 1)) " ") (setq res (strcat res c)))
+    (setq i (1+ i)))
+  res
+)
+
+(defun kt:kwfind (u kws / k res)
+  (foreach kw kws
+    (setq k (kt:kwnorm kw))
+    (if (and (not res) (/= u "")
+             (or (= (substr k 1 (strlen u)) u) (= (substr u 1 (strlen k)) k)))
+      (setq res kw)))
+  res
+)
+
+(defun kt:getkw (msg kws / u res)
+  (setq res 'NONE)
+  (while (= res 'NONE)
+    (setq u (kt:kwnorm (getstring T msg)))
+    (cond ((= u "") (setq res nil))
+          ((setq res (kt:kwfind u kws)))
+          (T (setq res 'NONE)
+             (princ (strcat "\nKhong hieu lua chon. Go chu cai dau: " (kt:join kws "/"))))))
+  res
+)
+
 (defun kt:ask-scope (/ k)
   ;; "[Toan ban ve/Vung]": T de chay tiep (vung da dat neu chon Vung), nil neu ESC
   (kt:region-clear)
-  (initget "Toan Vung All Window")
-  (setq k (vl-catch-all-apply 'getkword (list "\nPham vi kiem tra [Toan ban ve/Vung] <Toan ban ve>: ")))
+  (setq k (vl-catch-all-apply 'kt:getkw
+            (list "\nPham vi kiem tra [Toan ban ve/Vung] <Toan ban ve>: " '("Toan" "Vung" "All" "Window"))))
   (cond ((vl-catch-all-error-p k) (princ "\n[KT] Huy.") nil)
         ((member k '("Vung" "Window")) (kt:ask-window))
         (T T))
@@ -1179,7 +1221,7 @@
                                     (kt:str (car (nth 4 x))) "")))
                    ",")
           fh))
-      (close fh)
+      (kt:close fh)
       T))
 )
 
@@ -1214,6 +1256,24 @@
   (if (and v (not (member (type v) '(STR INT REAL ENAME PICKSET FILE)))) T nil)
 )
 
+(defun kt:probe-io (/ f fh r out step)
+  ;; thu tung buoc mo/ghi/dong/doc file tam; tra ve chuoi ket qua tung buoc
+  (setq f (kt:path (cond ((getenv "TEMP")) ((kt:dir))) "kt_probe.txt") out "")
+  (foreach step (list (list "open-w" '(lambda () (setq fh (open f "w"))))
+                      (list "write" '(lambda () (write-line "kt probe" fh)))
+                      (list "close-w" '(lambda () (close fh)))
+                      (list "open-r" '(lambda () (setq fh (open f "r"))))
+                      (list "read" '(lambda () (read-line fh)))
+                      (list "close-r" '(lambda () (close fh))))
+    (setq r (vl-catch-all-apply (cadr step) nil))
+    (setq out (strcat out (car step) "="
+                      (cond ((vl-catch-all-error-p r) (strcat "LOI(" (vl-catch-all-error-message r) ")"))
+                            ((and (member (car step) '("open-w" "open-r")) (null r)) "nil")
+                            (T "OK"))
+                      " ")))
+  (strcat out " [" f "]")
+)
+
 (defun c:KTPROBE (/ fns ok bad r)
   (setq fns '(vl-catch-all-apply vl-sort vl-string-search vl-string-subst vl-remove
               vl-remove-if-not vl-member-if vl-string-translate vl-string->list vl-list->string
@@ -1239,7 +1299,9 @@
   (setq r (vl-catch-all-apply 'kt:box-dxf (list (entlast))))
   (princ (strcat "\n  Hop bao (DXF du phong): "
                  (if (vl-catch-all-error-p r) "LOI" (vl-princ-to-string r))))
-  (princ "\nGui ket qua nay cho nguoi phat trien neu co dong THIEU.")
+  ;; thu doc/ghi file (VinaCAD bao "C operation (write) ... Bad file descriptor")
+  (princ (strcat "\n  File I/O: " (kt:probe-io)))
+  (princ "\nGui ket qua nay cho nguoi phat trien neu co dong THIEU hoac LOI.")
   (princ)
 )
 

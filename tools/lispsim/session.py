@@ -94,6 +94,8 @@ class Session:
         self.I = Interp()
         # env: dict registry getenv/setenv (dung chung giua 2 Session = khoi dong lai CAD)
         self.I.env = env if env is not None else {}
+        # mode "lms": them cac loi that cua VinaCAD (close bao loi write, getkword hong)
+        self.I.lms_quirks = (mode == "lms")
         install(self.I, dwg, self.vfs, "acad" if mode == "lms" else mode)
         self.loaded = []
 

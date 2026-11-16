@@ -183,7 +183,7 @@
     (vl-catch-all-apply 'vl-file-delete (list f)))
 )
 
-(defun ktdlg:load (/ cands f fh id r res)
+(defun ktdlg:load (/ cands f fh id r res w)
   ;; ghi file DCL va load_dialog; thu lan luot nhieu thu muc (TEMP co the co dau / khong ghi duoc)
   ;; tra ve id (>= 0) hoac nil
   (if (not (ktdlg:defined 'load_dialog))
@@ -199,8 +199,11 @@
       (foreach f cands
         (if (and f (not res) (setq fh (open f "w")))
           (progn
-            (foreach ln (ktdlg:dcl-lines) (write-line ln fh))
-            (close fh)
+            ;; VinaCAD (LMS) co the bao loi "C operation (write)" -> bat loi, van thu load_dialog
+            (setq w (vl-catch-all-apply '(lambda () (foreach ln (ktdlg:dcl-lines) (write-line ln fh))) nil))
+            (kt:close fh)
+            (if (vl-catch-all-error-p w)
+              (princ (strcat "\n[KT] Canh bao ghi " f ": " (vl-catch-all-error-message w))))
             (setq r (vl-catch-all-apply 'load_dialog (list f)))
             (if (and (numberp r) (>= r 0))
               (setq res r *KT:DLG-FILE* f)
@@ -537,8 +540,7 @@
 
 (defun ktdlg:fallback (/ k)
   (princ "\n[KT] Khong mo duoc hop thoai -> chuyen sang che do DONG LENH.")
-  (initget "Co Khong")
-  (setq k (getkword "\nChay tat ca kiem tra (KTALL) ngay? [Co/Khong] <Co>: "))
+  (setq k (kt:getkw "\nChay tat ca kiem tra (KTALL) ngay? [Co/Khong] <Co>: " '("Co" "Khong")))
   (if (/= k "Khong")
     (if (ktdlg:defined 'c:KTALL)
       (c:KTALL)

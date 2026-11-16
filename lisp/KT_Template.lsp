@@ -436,8 +436,7 @@
       (T
        (princ (strcat "\nTu doan khung ten: " (nth 1 guess) "  (" (itoa (nth 2 guess)) " ban, "
                       (itoa (nth 4 guess)) " tag, kich thuoc " (ktmau:fmt (nth 3 guess)) ")"))
-       (initget "Co Khong Bo")
-       (setq kw (getkword "\nDung block nay? [Co/Khong/Bo] (Bo = bo qua muc KHUNG) <Co>: "))
+       (setq kw (kt:getkw "\nDung block nay? [Co/Khong/Bo] (Bo = bo qua muc KHUNG) <Co>: " '("Co" "Khong" "Bo")))
        (cond ((or (null kw) (= kw "Co")) (setq blk (nth 1 guess) en (nth 5 guess) ok T))
              ((= kw "Bo") (setq blk nil ok T))))))
   (if (and blk en) (list blk en))
@@ -531,8 +530,7 @@
                 (setq atts (mapcar 'car (kt:attribs en)))
                 (princ (strcat "\nKhung phu: " nm " (vien cung kho giay voi " (car kh) ", ty le goc "
                                (ktmau:fmt fac) (if atts (strcat ", tag: " (kt:join atts ",")) ", khong attribute") ")"))
-                (initget "Co Khong")
-                (setq kw (getkword "\nThem block nay vao muc KHUNG? [Co/Khong] <Co>: "))
+                (setq kw (kt:getkw "\nThem block nay vao muc KHUNG? [Co/Khong] <Co>: " '("Co" "Khong")))
                 (if (/= kw "Khong")
                   (progn
                     (setq others nil
@@ -877,8 +875,8 @@
       (if fo
         (progn
           (while (setq ln (read-line fi)) (write-line ln fo))
-          (close fo)))
-      (close fi)
+          (kt:close fo)))
+      (kt:close fi)
       (if fo T nil)))
 )
 
@@ -897,13 +895,12 @@
         (princ (strcat "\nDa sao luu file cu: " bak))
         (progn
           (princ (strcat "\n[KTMAU] Khong sao luu duoc " bak))
-          (initget "Co Khong")
-          (if (/= (getkword "\nVan ghi de file chuan? [Co/Khong] <Khong>: ") "Co")
+          (if (/= (kt:getkw "\nVan ghi de file chuan? [Co/Khong] <Khong>: " '("Co" "Khong")) "Co")
             (setq f nil))))))
   (if (and f (setq fh (open f "w")))
     (progn
       (foreach l lines (write-line l fh))
-      (close fh)
+      (kt:close fh)
       T))
 )
 
@@ -943,8 +940,7 @@
      (princ "\n[KTMAU] Chua nap KT_Core.lsp. Hay nap KT_Load.lsp truoc."))
     (T
      (princ "\n=== KTMAU: trich chuan cong ty tu ban ve dang mo ===")
-     (initget "Co Khong")
-     (setq filt (/= (getkword "\nChi lay layer/dimstyle/textstyle DANG CO doi tuong (chuan sach)? [Co/Khong] <Co>: ")
+     (setq filt (/= (kt:getkw "\nChi lay layer/dimstyle/textstyle DANG CO doi tuong (chuan sach)? [Co/Khong] <Co>: " '("Co" "Khong"))
                     "Khong"))
      (if filt
        (progn
